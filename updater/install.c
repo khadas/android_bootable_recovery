@@ -46,6 +46,7 @@
 #include "mtdutils/mtdutils.h"
 #include "updater.h"
 #include "install.h"
+#include "ubootenv/uboot_env.h"
 
 #ifdef USE_EXT4
 #include "make_ext4fs.h"
@@ -1789,6 +1790,40 @@ Value* EnableRebootFn(const char* name, State* state, int argc, Expr* argv[]) {
     return StringValue(strdup("t"));
 }
 
+Value* SetBootloaderEnvFn(const char* name, State* state, int argc, Expr* argv[])
+{
+    char* result = NULL;
+    if (argc != 2) {
+        return ErrorAbort(state, "%s() expects 3 args, got %d", name, argc);
+    }
+    char* env_name;
+    char* env_val;
+    if (ReadArgs(state, argv, 2, &env_name, &env_val) < 0) return NULL;
+
+    if (strlen(env_name) == 0) {
+        ErrorAbort(state, "env_name argument to %s() can't be empty", name);
+        goto done;
+    }
+
+    if (strlen(env_val) == 0) {
+        ErrorAbort(state, "env_val argument to %s() can't be empty", name);
+        goto done;
+    }
+
+    int ret = set_bootloader_env(env_name, env_val);
+    if (!ret) {
+        result = env_name;
+    }
+    printf("setenv %s %s %s.(%d)\n", env_name, env_val,
+        (ret < 0) ? "failed" : "successful", ret);
+
+
+done:
+    free(env_val);
+    if (result != env_name) free(env_name);
+    return StringValue(result);
+}
+
 void RegisterInstallFunctions() {
     RegisterFunction("mount", MountFn);
     RegisterFunction("is_mounted", IsMountedFn);
@@ -1839,4 +1874,6 @@ void RegisterInstallFunctions() {
     RegisterFunction("set_stage", SetStageFn);
 
     RegisterFunction("enable_reboot", EnableRebootFn);
+
+    RegisterFunction("set_bootloader_env", SetBootloaderEnvFn);
 }
