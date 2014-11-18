@@ -358,6 +358,13 @@ Value* FormatFn(const char* name, State* state, int argc, Expr* argv[]) {
         result = location;
 #ifdef USE_EXT4
     } else if (strcmp(fs_type, "ext4") == 0) {
+        if (strcmp(location, "/dev/block/system") == 0) {
+            if (ext4_erase_volum("/system")) {
+                fprintf(stderr, "%s: ext4_erase_volum failed on %s", name, location);
+                result = strdup("");
+                goto done;
+            }
+        }
         int status = make_ext4fs(location, atoll(fs_size), mount_point, sehandle);
         if (status != 0) {
             printf("%s: make_ext4fs failed (%d) on %s",

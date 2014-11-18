@@ -28,6 +28,8 @@
 
 #include "mtdutils.h"
 
+#define BLKWIPEPART    _IO('M',127)
+
 struct MtdPartition {
     int device_index;
     unsigned int size;
@@ -393,6 +395,29 @@ MtdWriteContext *mtd_write_partition(const MtdPartition *partition)
     ctx->partition = partition;
     ctx->stored = 0;
     return ctx;
+}
+
+int ext4_erase_volum(const char *volume)
+{
+    int fd =0, err=0;
+    char devname[128] = {0};
+
+    sprintf(devname, "/dev/block%s", volume);
+    printf("ext4_erase_volum: erase %s\n", devname);
+    fd = open(devname, O_RDWR);
+    if (fd < 0) {
+        printf("ext4_erase_volum : open %s failed (%s)\n", devname, strerror(errno));
+        return -1;
+    }
+
+    err = ioctl(fd, BLKWIPEPART);
+    if (err < 0) {
+        fprintf (stderr,"ext4_erase_volum: ioctl BLKWIPEPART failed\n");
+    }
+
+    printf("ext4_erase_volum: erase OK\n");
+    close(fd);
+    return 0;
 }
 
 static void add_bad_block_offset(MtdWriteContext *ctx, off_t pos) {

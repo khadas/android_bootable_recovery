@@ -41,6 +41,8 @@ extern struct selabel_handle *sehandle;
 
 static const char* PERSISTENT_PATH = "/persistent";
 
+#define NUM_OF_PARTITION_TO_ENUM    6
+
 void load_volume_table()
 {
     int i;
@@ -72,6 +74,145 @@ void load_volume_table()
 
 Volume* volume_for_path(const char* path) {
     return fs_mgr_get_entry_for_mount_point(fstab, path);
+}
+
+static int mount_fs_rdonly(char *device_name, Volume *vol, const char *fs_type) {
+    if (!mount(device_name, vol->mount_point, fs_type,
+        MS_NOATIME | MS_NODEV | MS_NODIRATIME | MS_RDONLY, 0)) {
+        LOGW("successful to mount %s on %s by read-only\n",
+            device_name, vol->mount_point);
+        return 0;
+    } else {
+        LOGE("failed to mount %s on %s by read-only (%s)\n",
+            device_name, vol->mount_point, strerror(errno));
+    }
+
+    return -1;
+}
+
+int auto_mount_fs(char *device_name, Volume *vol) {
+    if (access(device_name, F_OK)) {
+        return -1;
+    }
+
+    if (!strcmp(vol->fs_type, "auto")) {
+        if (!mount(device_name, vol->mount_point, "vfat",
+            MS_NOATIME | MS_NODEV | MS_NODIRATIME, "")) {
+            goto auto_mounted;
+        } else {
+            if (strstr(vol->mount_point, "sdcard")) {
+                LOGE("failed to mount %s on %s (%s).try read-only ...\n",
+                    device_name, vol->mount_point, strerror(errno));
+                if (!mount_fs_rdonly(device_name, vol, "vfat")) {
+                    goto auto_mounted;
+                }
+            }
+        }
+
+        if (!mount(device_name, vol->mount_point, "ntfs",
+            MS_NOATIME | MS_NODEV | MS_NODIRATIME, "")) {
+            goto auto_mounted;
+        } else {
+            if (strstr(vol->mount_point, "sdcard")) {
+                LOGE("failed to mount %s on %s (%s).try read-only ...\n",
+                    device_name, vol->mount_point, strerror(errno));
+                if (!mount_fs_rdonly(device_name, vol, "ntfs")) {
+                    goto auto_mounted;
+                }
+            }
+        }
+
+        if (!mount(device_name, vol->mount_point, "exfat",
+            MS_NOATIME | MS_NODEV | MS_NODIRATIME, "")) {
+            goto auto_mounted;
+        } else {
+            if (strstr(vol->mount_point, "sdcard")) {
+                LOGE("failed to mount %s on %s (%s).try read-only ...\n",
+                    device_name, vol->mount_point, strerror(errno));
+                if (!mount_fs_rdonly(device_name, vol, "exfat")) {
+                    goto auto_mounted;
+                }
+            }
+        }
+    } else {
+        if(!mount(device_name, vol->mount_point, vol->fs_type,
+            MS_NOATIME | MS_NODEV | MS_NODIRATIME, "")) {
+            goto auto_mounted;
+        } else {
+            if (strstr(vol->mount_point, "sdcard")) {
+                LOGE("failed to mount %s on %s (%s).try read-only ...\n",
+                    device_name, vol->mount_point, strerror(errno));
+                if (!mount_fs_rdonly(device_name, vol, vol->fs_type)) {
+                    goto auto_mounted;
+                }
+            }
+        }
+    }
+
+    return -1;
+
+auto_mounted:
+    return 0;
+}
+
+int smart_device_mounted(Volume *vol) {
+    int i = 0, len = 0;
+    char * tmp = NULL;
+    char device_name[256] = {0};
+    char *mounted_device = NULL;
+
+    mkdir(vol->mount_point, 0755);
+
+    if (vol->blk_device != NULL) {
+        tmp = strchr(vol->blk_device, '#');
+        len = tmp - vol->blk_device;
+        if (tmp && len < 255) {
+            strncpy(device_name, vol->blk_device, len);
+            for (i = 1; i <= NUM_OF_PARTITION_TO_ENUM; i++) {
+                device_name[len] = '\0' + i;
+                device_name[len + 1] = '\0';
+                LOGW("try mount %s ...\n", device_name);
+                if (!access(device_name, F_OK)) {
+                    if (!auto_mount_fs(device_name, vol)) {
+                        mounted_device = device_name;
+                        LOGW("successful to mount %s\n", device_name);
+                        goto mounted;
+                    }
+                }
+            }
+
+            const char *mmcblk0 = "/dev/block/mmcblk0";
+            if (!strncmp(device_name, mmcblk0, strlen(mmcblk0))) {
+                device_name[len-1] = '\0';
+            } else {
+                device_name[len] = '\0';
+            }
+
+            LOGW("try mount %s ...\n", device_name);
+            if (!access(device_name, F_OK)) {
+                if (!auto_mount_fs(device_name, vol)) {
+                    mounted_device = device_name;
+                    LOGW("successful to mount %s\n", device_name);
+                    goto mounted;
+                }
+            }
+        } else {
+            LOGW("try mount %s ...\n", vol->blk_device);
+            strncpy(device_name, vol->blk_device, sizeof(device_name));
+            if (!access(device_name, F_OK)) {
+                if (!auto_mount_fs(device_name, vol)) {
+                    mounted_device = device_name;
+                    LOGW("successful to mount %s\n", device_name);
+                    goto mounted;
+                }
+            }
+        }
+    }
+
+    return -1;
+
+mounted:
+    return 0;
 }
 
 int ensure_path_mounted(const char* path) {
@@ -113,13 +254,36 @@ int ensure_path_mounted(const char* path) {
         }
         return mtd_mount_partition(partition, v->mount_point, v->fs_type, 0);
     } else if (strcmp(v->fs_type, "ext4") == 0 ||
-               strcmp(v->fs_type, "vfat") == 0) {
-        result = mount(v->blk_device, v->mount_point, v->fs_type,
-                       MS_NOATIME | MS_NODEV | MS_NODIRATIME, "");
-        if (result == 0) return 0;
+        strcmp(v->fs_type, "vfat") == 0 ||
+        strcmp(v->fs_type, "auto") == 0) {
+        if ((strcmp(v->fs_type, "vfat") == 0 || strstr(v->fs_type, "auto")) &&
+            (strstr(v->mount_point, "sdcard") || strstr(v->mount_point, "udisk"))) {
+            int time_out = 400000;
+            while (time_out) {
+                if (!smart_device_mounted(v)) {
+                    return 0;
+                }
+                usleep(100000);
+                time_out -= 100000;
+            }
+            LOGE("failed to mount %s (%s)\n", v->mount_point, strerror(errno));
+            return -1;
+        } else {
+            if (strstr(v->mount_point, "system")) {
+                if (!mount(v->blk_device, v->mount_point, v->fs_type,
+                    MS_NOATIME | MS_NODEV | MS_NODIRATIME | MS_RDONLY, "")) {
+                    return 0;
+                }
+            } else {
+                if (!mount(v->blk_device, v->mount_point, v->fs_type,
+                    MS_NOATIME | MS_NODEV | MS_NODIRATIME, "")) {
+                    return 0;
+                }
+            }
 
-        LOGE("failed to mount %s (%s)\n", v->mount_point, strerror(errno));
-        return -1;
+            LOGE("failed to mount %s (%s)\n", v->mount_point, strerror(errno));
+            return -1;
+        }
     }
 
     LOGE("unknown fs_type \"%s\" for %s\n", v->fs_type, v->mount_point);
@@ -234,6 +398,10 @@ int format_volume(const char* volume) {
         }
         int result;
         if (strcmp(v->fs_type, "ext4") == 0) {
+            if (ext4_erase_volum(volume)) {
+                LOGE("format_volume: ext4_erase_volum failed on %s\n", v->blk_device);
+                return -1;
+            }
             result = make_ext4fs(v->blk_device, length, volume, sehandle);
         } else {   /* Has to be f2fs because we checked earlier. */
             if (v->key_loc != NULL && strcmp(v->key_loc, "footer") == 0 && length < 0) {
@@ -306,16 +474,23 @@ int setup_install_mounts() {
         LOGE("can't set up install mounts: no fstab loaded\n");
         return -1;
     }
+
     for (int i = 0; i < fstab->num_entries; ++i) {
         Volume* v = fstab->recs + i;
 
-        if (strcmp(v->mount_point, "/tmp") == 0 ||
-            strcmp(v->mount_point, "/cache") == 0) {
+        if (strcmp(v->mount_point, "/tmp") == 0 ) {
             if (ensure_path_mounted(v->mount_point) != 0) {
                 LOGE("failed to mount %s\n", v->mount_point);
                 return -1;
             }
-
+        } else if (strcmp(v->mount_point, "/cache") == 0){
+            if (ensure_path_mounted(v->mount_point) != 0) {
+                format_volume("/cache");
+                if (ensure_path_mounted(v->mount_point) != 0) {
+                    LOGE("failed to mount %s\n", v->mount_point);
+                    return -1;
+                }
+            }
         } else {
             if (ensure_path_unmounted(v->mount_point) != 0) {
                 LOGE("failed to unmount %s\n", v->mount_point);
