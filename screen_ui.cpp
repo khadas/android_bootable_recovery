@@ -206,12 +206,12 @@ void ScreenRecoveryUI::SetColor(UIElement e) {
 // Should only be called with updateMutex locked.
 void ScreenRecoveryUI::draw_screen_locked()
 {
-    if (!show_text) {
-        draw_background_locked(currentIcon);
-        draw_progress_locked();
-    } else {
-        gr_color(0, 0, 0, 255);
-        gr_clear();
+    draw_background_locked(currentIcon);
+    draw_progress_locked();
+
+    if (show_text) {
+        //gr_color(0, 0, 0, 255);
+        //gr_clear();
 
         int y = 0;
         int i = 0;
@@ -296,7 +296,7 @@ void ScreenRecoveryUI::progress_loop() {
         // update the installation animation, if active
         // skip this if we have a text overlay (too expensive to update)
         if ((currentIcon == INSTALLING_UPDATE || currentIcon == ERASING) &&
-            installing_frames > 0 && !show_text) {
+            installing_frames > 0 /*&& !show_text*/) {
             installingFrame = (installingFrame + 1) % installing_frames;
             redraw = 1;
         }
@@ -526,8 +526,8 @@ int ScreenRecoveryUI::SelectMenu(int sel) {
     if (show_menu > 0) {
         old_sel = menu_sel;
         menu_sel = sel;
-        if (menu_sel < 0) menu_sel = 0;
-        if (menu_sel >= menu_items) menu_sel = menu_items-1;
+        if (menu_sel < 0) menu_sel = menu_items - 1;
+        if (menu_sel >= menu_items) menu_sel = 0;
         sel = menu_sel;
         if (menu_sel != old_sel) update_screen_locked();
     }

@@ -87,7 +87,7 @@ static void text_blend(unsigned char* src_p, int src_row_bytes,
                 *px++ = gr_current_r;
                 *px++ = gr_current_g;
                 *px++ = gr_current_b;
-                px++;
+                *px++ = 255;
             } else if (a > 0) {
                 *px = (*px * (255-a) + gr_current_r * a) / 255;
                 ++px;
@@ -95,9 +95,10 @@ static void text_blend(unsigned char* src_p, int src_row_bytes,
                 ++px;
                 *px = (*px * (255-a) + gr_current_b * a) / 255;
                 ++px;
-                ++px;
+                *px++ = 255;
             } else {
-                px += 4;
+                px += 3;
+                *px++ = 255;
             }
         }
         src_p += src_row_bytes;
@@ -205,7 +206,7 @@ void gr_fill(int x1, int y1, int x2, int y2)
                 *px++ = gr_current_r;
                 *px++ = gr_current_g;
                 *px++ = gr_current_b;
-                px++;
+                *px++ = 255;
             }
             p += gr_draw->row_bytes;
         }
@@ -220,7 +221,7 @@ void gr_fill(int x1, int y1, int x2, int y2)
                 ++px;
                 *px = (*px * (255-gr_current_a) + gr_current_b * gr_current_a) / 255;
                 ++px;
-                ++px;
+                *px++ = 255;
             }
             p += gr_draw->row_bytes;
         }
