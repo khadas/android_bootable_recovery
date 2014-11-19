@@ -126,17 +126,24 @@ static int LoadPartitionContents(const char* filename, FileContents* file) {
     const char* magic = strtok(copy, ":");
 
     enum PartitionType type;
+    const char* partition = strtok(NULL, ":");
 
-    if (strcmp(magic, "MTD") == 0) {
-        type = MTD;
-    } else if (strcmp(magic, "EMMC") == 0) {
-        type = EMMC;
+    if (!mtd_partitions_scanned) {
+        mtd_scan_partitions();
+        mtd_partitions_scanned = 1;
+    }
+
+    const MtdPartition *mtd = mtd_find_partition_by_name(partition);
+    if (strcmp(magic, "MTD") == 0 || strcmp(magic, "EMMC") == 0) {
+        if (mtd != NULL)
+            type = MTD;
+        else
+            type = EMMC;
     } else {
         printf("LoadPartitionContents called with bad filename (%s)\n",
                filename);
         return -1;
     }
-    const char* partition = strtok(NULL, ":");
 
     int i;
     int colons = 0;
@@ -171,17 +178,12 @@ static int LoadPartitionContents(const char* filename, FileContents* file) {
     size_array = size;
     qsort(index, pairs, sizeof(int), compare_size_indices);
 
-    MtdReadContext* ctx = NULL;
-    FILE* dev = NULL;
+    MtdReadContext *ctx = NULL;
+    FILE *dev = NULL;
+    char emmcdevname[32] = {0};
 
     switch (type) {
         case MTD:
-            if (!mtd_partitions_scanned) {
-                mtd_scan_partitions();
-                mtd_partitions_scanned = 1;
-            }
-
-            const MtdPartition* mtd = mtd_find_partition_by_name(partition);
             if (mtd == NULL) {
                 printf("mtd partition \"%s\" not found (loading %s)\n",
                        partition, filename);
@@ -197,10 +199,11 @@ static int LoadPartitionContents(const char* filename, FileContents* file) {
             break;
 
         case EMMC:
-            dev = fopen(partition, "rb");
+            sprintf(emmcdevname, "/dev/block/%s", partition);
+            dev = fopen(emmcdevname, "rb");
             if (dev == NULL) {
                 printf("failed to open emmc partition \"%s\": %s\n",
-                       partition, strerror(errno));
+                       emmcdevname, strerror(errno));
                 return -1;
             }
     }
@@ -354,36 +357,40 @@ int WriteToPartition(unsigned char* data, size_t len,
     const char* magic = strtok(copy, ":");
 
     enum PartitionType type;
-    if (strcmp(magic, "MTD") == 0) {
-        type = MTD;
-    } else if (strcmp(magic, "EMMC") == 0) {
-        type = EMMC;
+    const char* partition = strtok(NULL, ":");
+
+    if (!mtd_partitions_scanned) {
+        mtd_scan_partitions();
+        mtd_partitions_scanned = 1;
+    }
+
+    const MtdPartition *mtd = mtd_find_partition_by_name(partition);
+    if (strcmp(magic, "MTD") == 0 || strcmp(magic, "EMMC") == 0){
+        if (mtd != NULL)
+            type = MTD;
+        else
+            type = EMMC;
     } else {
         printf("WriteToPartition called with bad target (%s)\n", target);
         return -1;
     }
-    const char* partition = strtok(NULL, ":");
 
     if (partition == NULL) {
         printf("bad partition target name \"%s\"\n", target);
         return -1;
     }
 
+    char emmcdevname[32] = {0};
+
     switch (type) {
         case MTD:
-            if (!mtd_partitions_scanned) {
-                mtd_scan_partitions();
-                mtd_partitions_scanned = 1;
-            }
-
-            const MtdPartition* mtd = mtd_find_partition_by_name(partition);
             if (mtd == NULL) {
                 printf("mtd partition \"%s\" not found for writing\n",
                        partition);
                 return -1;
             }
 
-            MtdWriteContext* ctx = mtd_write_partition(mtd);
+            MtdWriteContext *ctx = mtd_write_partition(mtd);
             if (ctx == NULL) {
                 printf("failed to init mtd partition \"%s\" for writing\n",
                        partition);
@@ -410,22 +417,35 @@ int WriteToPartition(unsigned char* data, size_t len,
             }
             break;
 
-        case EMMC:
-        {
+        case EMMC: {
+            sprintf(emmcdevname, "/dev/block/%s", partition);
+            FILE *f = fopen(emmcdevname, "wb");
+            if (fwrite(data, 1, len, f) != len) {
+                printf("short write writing to %s (%s)\n",
+                       emmcdevname, strerror(errno));
+                return -1;
+            }
+
+            if (f != NULL) {
+                fclose(f);
+                f = NULL;
+            }
+
             size_t start = 0;
             int success = 0;
-            int fd = open(partition, O_RDWR | O_SYNC);
+            int fd = open(emmcdevname, O_RDWR | O_SYNC);
             if (fd < 0) {
-                printf("failed to open %s: %s\n", partition, strerror(errno));
+                printf("failed to open %s: %s\n", emmcdevname, strerror(errno));
                 return -1;
             }
             int attempt;
 
-            for (attempt = 0; attempt < 2; ++attempt) {
+            for (attempt = 0; attempt < 10; ++attempt) {
+                size_t next_sync = start + (1<<20);
                 lseek(fd, start, SEEK_SET);
                 while (start < len) {
                     size_t to_write = len - start;
-                    if (to_write > 1<<20) to_write = 1<<20;
+                    if (to_write > 4096) to_write = 4096;
 
                     ssize_t written = write(fd, data+start, to_write);
                     if (written < 0) {
@@ -438,22 +458,15 @@ int WriteToPartition(unsigned char* data, size_t len,
                         }
                     }
                     start += written;
+                    if (start >= next_sync) {
+                        fsync(fd);
+                        next_sync = start + (1<<20);
+                    }
                 }
+
                 if (fsync(fd) != 0) {
-                   printf("failed to sync to %s (%s)\n",
-                          partition, strerror(errno));
-                   return -1;
-                }
-                if (close(fd) != 0) {
-                   printf("failed to close %s (%s)\n",
-                          partition, strerror(errno));
-                   return -1;
-                }
-                fd = open(partition, O_RDONLY);
-                if (fd < 0) {
-                   printf("failed to reopen %s for verify (%s)\n",
-                          partition, strerror(errno));
-                   return -1;
+                    printf("fsync of \"%s\" failed: %s\n", partition, strerror(errno));
+                    return -1;
                 }
 
                 // drop caches so our subsequent verification read
@@ -463,7 +476,7 @@ int WriteToPartition(unsigned char* data, size_t len,
                 write(dc, "3\n", 2);
                 close(dc);
                 sleep(1);
-                printf("  caches dropped\n");
+                printf("caches dropped\n");
 
                 // verify
                 lseek(fd, 0, SEEK_SET);
@@ -505,17 +518,23 @@ int WriteToPartition(unsigned char* data, size_t len,
                     success = true;
                     break;
                 }
+
+                sleep(2);
             }
 
             if (!success) {
                 printf("failed to verify after all attempts\n");
+                close(fd);
                 return -1;
             }
 
             if (close(fd) != 0) {
-                printf("error closing %s (%s)\n", partition, strerror(errno));
+                printf("close of \"%s\" failed: %s\n", partition, strerror(errno));
                 return -1;
             }
+
+            // sync after closing in hopes of
+            // getting the data actually onto flash.
             sync();
             break;
         }
