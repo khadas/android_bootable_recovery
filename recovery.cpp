@@ -42,10 +42,12 @@
 #include "screen_ui.h"
 #include "device.h"
 #include "adb_install.h"
+
 extern "C" {
 #include "minadbd/adb.h"
 #include "fuse_sideload.h"
 #include "fuse_sdcard_provider.h"
+#include "ubootenv/uboot_env.h"
 }
 
 struct selabel_handle *sehandle;
@@ -73,7 +75,10 @@ static const char *LOG_FILE = "/cache/recovery/log";
 static const char *LAST_INSTALL_FILE = "/cache/recovery/last_install";
 static const char *LOCALE_FILE = "/cache/recovery/last_locale";
 static const char *CACHE_ROOT = "/cache";
+static const char *UDISK_ROOT = "/udisk";
 static const char *SDCARD_ROOT = "/sdcard";
+static const char *UDISK_COMMAND_FILE = "/udisk/factory_update_param.aml";
+static const char *SDCARD_COMMAND_FILE = "/sdcard/factory_update_param.aml";
 static const char *TEMPORARY_LOG_FILE = "/tmp/recovery.log";
 static const char *TEMPORARY_INSTALL_FILE = "/tmp/last_install";
 
@@ -213,29 +218,113 @@ get_args(int *argc, char ***argv) {
         }
     }
 
-    // --- if that doesn't work, try the command file
+    // --- if that doesn't work, try the command file form environment:recovery_command
     if (*argc <= 1) {
-        FILE *fp = fopen_path(COMMAND_FILE, "r");
-        if (fp != NULL) {
-            char *token;
+        char *parg = NULL;
+        char *recovery_command = get_bootloader_env("recovery_command");
+        if (recovery_command != NULL && strcmp(recovery_command, "")) {
             char *argv0 = (*argv)[0];
             *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
             (*argv)[0] = argv0;  // use the same program name
 
             char buf[MAX_ARG_LENGTH];
-            for (*argc = 1; *argc < MAX_ARGS; ++*argc) {
-                if (!fgets(buf, sizeof(buf), fp)) break;
-                token = strtok(buf, "\r\n");
-                if (token != NULL) {
-                    (*argv)[*argc] = strdup(token);  // Strip newline.
-                } else {
-                    --*argc;
+            strcpy(buf, recovery_command);
+
+            if ((parg = strtok(buf, "#")) == NULL) {
+                LOGE("Bad bootloader arguments\n\"%.20s\"\n", recovery_command);
+            } else {
+                (*argv)[1] = strdup(parg);  // Strip newline.
+                for (*argc = 2; *argc < MAX_ARGS; ++*argc) {
+                    if ((parg = strtok(NULL, "#")) == NULL) {
+                        break;
+                    } else {
+                        (*argv)[*argc] = strdup(parg);  // Strip newline.
+                    }
                 }
+                LOGI("Got arguments from bootloader\n");
+            }
+        } else {
+            LOGE("Bad bootloader arguments\n\"%.20s\"\n", recovery_command);
+        }
+    }
+
+    // --- if that doesn't work, try the command file
+    char * temp_args = NULL;
+    if (*argc <= 1) {
+        FILE *fp = fopen_path(COMMAND_FILE, "r");
+        if (fp != NULL) {
+            char *argv0 = (*argv)[0];
+            *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
+            (*argv)[0] = argv0;  // use the same program name
+
+            char buf[MAX_ARG_LENGTH];
+            for (*argc = 1; *argc < MAX_ARGS; ) {
+                if (!fgets(buf, sizeof(buf), fp)) break;
+                temp_args = strtok(buf, "\r\n");
+                if (temp_args == NULL)  continue;
+                (*argv)[*argc]  = strdup(temp_args);   // Strip newline.
+                ++*argc;
             }
 
             check_and_fclose(fp, COMMAND_FILE);
             LOGI("Got arguments from %s\n", COMMAND_FILE);
         }
+    }
+
+    // --- sleep 1 second to ensure SD card initialization complete
+    usleep(1000000);
+
+    // --- if that doesn't work, try the sdcard command file
+    if (*argc <= 1) {
+        FILE *fp = fopen_path(SDCARD_COMMAND_FILE, "r");
+        if (fp != NULL) {
+            char *argv0 = (*argv)[0];
+            *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
+            (*argv)[0] = argv0;  // use the same program name
+
+            char buf[MAX_ARG_LENGTH];
+            for (*argc = 1; *argc < MAX_ARGS; ) {
+                if (!fgets(buf, sizeof(buf), fp)) break;
+                temp_args = strtok(buf, "\r\n");
+                if (temp_args == NULL)  continue;
+                (*argv)[*argc]  = strdup(temp_args);  // Strip newline.
+                ++*argc;
+            }
+
+            check_and_fclose(fp, SDCARD_COMMAND_FILE);
+            LOGI("Got arguments from %s\n", SDCARD_COMMAND_FILE);
+        }
+    }
+
+    // --- if that doesn't work, try the udisk command file
+    if (*argc <= 1) {
+        FILE *fp = fopen_path(UDISK_COMMAND_FILE, "r");
+        if (fp != NULL) {
+            char *argv0 = (*argv)[0];
+            *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
+            (*argv)[0] = argv0;  // use the same program name
+
+            char buf[MAX_ARG_LENGTH];
+            for (*argc = 1; *argc < MAX_ARGS; ) {
+                if (!fgets(buf, sizeof(buf), fp)) break;
+                temp_args = strtok(buf, "\r\n");
+                if (temp_args == NULL)  continue;
+                (*argv)[*argc]  = strdup(temp_args);   // Strip newline.
+                ++*argc;
+            }
+
+            check_and_fclose(fp, UDISK_COMMAND_FILE);
+            LOGI("Got arguments from %s\n", UDISK_COMMAND_FILE);
+        }
+    }
+
+    // --- if no argument, then force show_text
+    if (*argc <= 1) {
+        char *argv0 = (*argv)[0];
+        *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
+        (*argv)[0] = argv0;  // use the same program name
+        (*argv)[1] = (char *)"--show_text";
+        *argc = 2;
     }
 
     // --> write the arguments we have back into the bootloader control block
@@ -732,6 +821,119 @@ static void choose_recovery_file(Device* device) {
     }
 }
 
+static int ext_update(Device* device, int wipe_cache) {
+    int status = 0;
+    int found_upgrade = 0;
+    char* update_package = NULL;
+    const char** title_headers = NULL;
+    const char* headers[] = { "Confirm update?",
+                    "  THIS CAN NOT BE UNDONE.",
+                    "",
+                    NULL };
+    const char* items[] = { " ../",
+                    " Update from sdcard",
+                    " Update from udisk",
+                    NULL };
+
+    title_headers = prepend_title((const char**)headers);
+
+    int chosen_item = get_menu_selection(title_headers, items, 1, 0, device);
+        if (chosen_item != 1 && chosen_item != 2){
+        return 1;
+    }
+
+    switch(chosen_item) {
+        case 1:
+            // Some packages expect /cache to be mounted (eg,
+            // standard incremental packages expect to use /cache
+            // as scratch space).
+            ensure_path_mounted(CACHE_ROOT);
+            ensure_path_unmounted(SDCARD_ROOT); // umount, if pull card and then insert card
+            ensure_path_mounted(SDCARD_ROOT);
+            update_package = browse_directory(SDCARD_ROOT, device);
+            if (update_package == NULL) {
+                ui->Print("\n-- No package file selected.\n", update_package);
+                break;
+            }
+            found_upgrade = 1;
+            break;
+
+        case 2:
+            ensure_path_mounted(CACHE_ROOT);
+            ensure_path_unmounted(UDISK_ROOT);
+            ensure_path_mounted(UDISK_ROOT);
+            update_package = browse_directory(UDISK_ROOT, device);
+            if (update_package == NULL) {
+                ui->Print("\n-- No package file selected.\n", update_package);
+                break;
+            }
+            found_upgrade = 2;
+            break;
+    }
+
+    if (!found_upgrade) return 1;
+
+    ui->Print("\n-- Install %s ...\n", update_package);
+    set_sdcard_update_bootloader_message();
+    status = install_package(update_package, &wipe_cache, TEMPORARY_INSTALL_FILE, true);
+
+    if (status == INSTALL_SUCCESS && wipe_cache) {
+        ui->Print("\n-- Wiping cache (at package request)...\n");
+        if (erase_volume("/cache")) {
+            ui->Print("Cache wipe failed.\n");
+        } else {
+            ui->Print("Cache wipe complete.\n");
+        }
+    }
+
+    if (status >= 0) {
+        if (status != INSTALL_SUCCESS) {
+            ui->SetBackground(RecoveryUI::ERROR);
+            ui->Print("Installation aborted.\n");
+        } else if (!ui->IsTextVisible()) {
+            return 0;   // reboot if logs aren't visible
+        } else {
+            ui->Print("\nInstall from %s complete.\n", found_upgrade ? "sdcard" : "udisk");
+        }
+    }
+
+    return 1;
+}
+
+static int cache_update(Device* device, int wipe_cache) {
+    int status = 0;
+    char *update_package = browse_directory(CACHE_ROOT, device);
+    if (update_package == NULL) {
+        ui->Print("\n-- No package file selected.\n", update_package);
+        return 1;
+    }
+
+    ui->Print("\n-- Install %s ...\n", update_package);
+    set_sdcard_update_bootloader_message();
+    status = install_package(update_package, &wipe_cache, TEMPORARY_INSTALL_FILE, true);
+    if (status == INSTALL_SUCCESS && wipe_cache) {
+        ui->Print("\n-- Wiping cache (at package request)...\n");
+        if (erase_volume("/cache")) {
+            ui->Print("Cache wipe failed.\n");
+        } else {
+            ui->Print("Cache wipe complete.\n");
+        }
+    }
+
+    if (status >= 0) {
+        if (status != INSTALL_SUCCESS) {
+            ui->SetBackground(RecoveryUI::ERROR);
+            ui->Print("Installation aborted.\n");
+        } else if (!ui->IsTextVisible()) {
+            return 0;   // reboot if logs aren't visible
+        } else {
+            ui->Print("\nInstall from cache complete.\n");
+        }
+    }
+
+    return 1;
+}
+
 // Return REBOOT, SHUTDOWN, or REBOOT_BOOTLOADER.  Returning NO_ACTION
 // means to take the default, which is to reboot or shutdown depending
 // on if the --shutdown_after flag was passed to recovery.
@@ -783,48 +985,14 @@ prompt_and_wait(Device* device, int status) {
                 if (!ui->IsTextVisible()) return Device::NO_ACTION;
                 break;
 
-            case Device::APPLY_EXT: {
-                ensure_path_mounted(SDCARD_ROOT);
-                char* path = browse_directory(SDCARD_ROOT, device);
-                if (path == NULL) {
-                    ui->Print("\n-- No package file selected.\n", path);
-                    break;
-                }
-
-                ui->Print("\n-- Install %s ...\n", path);
-                set_sdcard_update_bootloader_message();
-                void* token = start_sdcard_fuse(path);
-
-                int status = install_package(FUSE_SIDELOAD_HOST_PATHNAME, &wipe_cache,
-                                             TEMPORARY_INSTALL_FILE, false);
-
-                finish_sdcard_fuse(token);
-                ensure_path_unmounted(SDCARD_ROOT);
-
-                if (status == INSTALL_SUCCESS && wipe_cache) {
-                    ui->Print("\n-- Wiping cache (at package request)...\n");
-                    if (erase_volume("/cache")) {
-                        ui->Print("Cache wipe failed.\n");
-                    } else {
-                        ui->Print("Cache wipe complete.\n");
-                    }
-                }
-
-                if (status >= 0) {
-                    if (status != INSTALL_SUCCESS) {
-                        ui->SetBackground(RecoveryUI::ERROR);
-                        ui->Print("Installation aborted.\n");
-                    } else if (!ui->IsTextVisible()) {
-                        return Device::NO_ACTION;  // reboot if logs aren't visible
-                    } else {
-                        ui->Print("\nInstall from sdcard complete.\n");
-                    }
-                }
+            case Device::APPLY_EXT:
+                if (!ext_update(device, wipe_cache))
+                    return Device::NO_ACTION;
                 break;
-            }
 
             case Device::APPLY_CACHE:
-                ui->Print("\nAPPLY_CACHE is deprecated.\n");
+                if (!cache_update(device, wipe_cache))
+                    return Device::NO_ACTION;
                 break;
 
             case Device::READ_RECOVERY_LASTLOG:
@@ -1029,7 +1197,9 @@ main(int argc, char **argv) {
                 ui->ShowText(true);
             }
         }
-    } else if (wipe_data) {
+    }
+
+    if (wipe_data) {
         if (device->WipeData()) status = INSTALL_ERROR;
         if (erase_volume("/data")) status = INSTALL_ERROR;
         if (wipe_cache && erase_volume("/cache")) status = INSTALL_ERROR;
@@ -1049,6 +1219,7 @@ main(int argc, char **argv) {
     }
     Device::BuiltinAction after = shutdown_after ? Device::SHUTDOWN : Device::REBOOT;
     if (status != INSTALL_SUCCESS || ui->IsTextVisible()) {
+        ui->ShowText(true);
         Device::BuiltinAction temp = prompt_and_wait(device, status);
         if (temp != Device::NO_ACTION) after = temp;
     }

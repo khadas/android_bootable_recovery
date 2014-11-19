@@ -128,7 +128,8 @@ try_update_binary(const char *path, ZipArchive *zip, int* wipe_cache) {
     }
     close(pipefd[1]);
 
-    *wipe_cache = 0;
+    //don`t overlay the value from recovery command file
+    //*wipe_cache = 0;
 
     char buffer[1024];
     FILE* from_child = fdopen(pipefd[0], "r");
