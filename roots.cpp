@@ -169,7 +169,7 @@ int smart_device_mounted(Volume *vol) {
         if (tmp && len < 255) {
             strncpy(device_name, vol->blk_device, len);
             for (i = 1; i <= NUM_OF_PARTITION_TO_ENUM; i++) {
-                device_name[len] = '\0' + i;
+                device_name[len] = '0' + i;
                 device_name[len + 1] = '\0';
                 LOGW("try mount %s ...\n", device_name);
                 if (!access(device_name, F_OK)) {
