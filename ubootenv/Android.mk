@@ -12,7 +12,7 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/..
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 
-LOCAL_STATIC_LIBRARIES += libsystemcontrol_recovery liblog libcutils libstdc++ libc libbz
+LOCAL_STATIC_LIBRARIES += libsystemcontrol_static liblog libcutils libstdc++ libc libbz
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/..
 
 include $(BUILD_STATIC_LIBRARY)
