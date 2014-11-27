@@ -39,7 +39,8 @@ LOCAL_SRC_FILES := \
     asn1_decoder.cpp \
     verifier.cpp \
     adb_install.cpp \
-    fuse_sdcard_provider.c
+    fuse_sdcard_provider.c \
+    misc/key.cpp
 
 LOCAL_MODULE := recovery
 

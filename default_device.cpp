@@ -189,7 +189,7 @@ class DefaultDevice : public Device {
 
                 char* original = strdup(buffer);
 
-                char* type = strtok(buffer+i, " \t\n");
+                char* type = strtok(original+i, " \t\n");
                 char* key1 = strtok(NULL, " \t\n");
                 char* key2 = strtok(NULL, " \t\n");
                 char* key3 = strtok(NULL, " \t\n");
