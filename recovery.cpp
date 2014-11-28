@@ -65,6 +65,7 @@ static const struct option OPTIONS[] = {
   { "shutdown_after", no_argument, NULL, 'p' },
   { "reason", required_argument, NULL, 'r' },
   { "write_key", required_argument, NULL, 'k' },
+  { "data_ro_wipe", no_argument, NULL, 'y' },
   { NULL, 0, NULL, 0 },
 };
 
@@ -725,15 +726,18 @@ browse_directory(const char* path, Device* device) {
 }
 
 static void
-wipe_data(int confirm, Device* device) {
+wipe_data(int confirm, Device* device, char* headers[]) {
     if (confirm) {
         static const char** title_headers = NULL;
 
         if (title_headers == NULL) {
-            const char* headers[] = { "Confirm wipe of all user data?",
+            char* def_headers[] = { "Confirm wipe of all user data?",
                                       "  THIS CAN NOT BE UNDONE.",
                                       "",
                                       NULL };
+            if (headers == NULL) {
+                headers = def_headers;
+            }
             title_headers = prepend_title((const char**)headers);
         }
 
@@ -762,6 +766,11 @@ wipe_data(int confirm, Device* device) {
     erase_volume("/cache");
     erase_persistent_partition();
     ui->Print("Data wipe complete.\n");
+}
+
+static void
+wipe_data_with_headers(int confirm, Device* device, char* headers[]) {
+    wipe_data( confirm, device, headers);
 }
 
 static void file_to_ui(const char* fn) {
@@ -976,7 +985,7 @@ prompt_and_wait(Device* device, int status) {
                 return chosen_action;
 
             case Device::WIPE_DATA:
-                wipe_data(ui->IsTextVisible(), device);
+                wipe_data(ui->IsTextVisible(), device, NULL);
                 if (!ui->IsTextVisible()) return Device::NO_ACTION;
                 break;
 
@@ -1092,6 +1101,7 @@ main(int argc, char **argv) {
     bool just_exit = false;
     bool shutdown_after = false;
     char *key_optarg = NULL;
+    int data_ro_wipe = 0;
 
     int arg;
     while ((arg = getopt_long(argc, argv, "", OPTIONS, NULL)) != -1) {
@@ -1114,6 +1124,7 @@ main(int argc, char **argv) {
         }
         case 'p': shutdown_after = true; break;
         case 'r': reason = optarg; break;
+        case 'y': data_ro_wipe = 1; break;
         case '?':
             LOGE("Invalid command argument\n");
             continue;
@@ -1231,6 +1242,19 @@ main(int argc, char **argv) {
         copy_logs();
         ui->SetBackground(RecoveryUI::ERROR);
     }
+
+    if (data_ro_wipe) {
+        printf("data_ro_wipe tip\n");
+        ui->ShowText(true);
+        char* headers[] = { "Boot fail because data read-only, partition maybe damaged,do you want to wipe data?",
+                                      "THIS CAN NOT BE UNDONE.",
+                                      "",
+                                      NULL };
+        wipe_data_with_headers(1, device, headers);
+        status = INSTALL_SUCCESS;
+        ui->ShowText(false);
+    }
+
     Device::BuiltinAction after = shutdown_after ? Device::SHUTDOWN : Device::REBOOT;
     if (status != INSTALL_SUCCESS || ui->IsTextVisible()) {
         ui->ShowText(true);
