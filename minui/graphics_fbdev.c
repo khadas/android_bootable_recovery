@@ -40,6 +40,7 @@ static void fbdev_exit(minui_backend*);
 static GRSurface gr_framebuffer[2];
 static bool double_buffered;
 static GRSurface* gr_draw = NULL;
+static GRSurface temp_buffer[1];
 static int displayed_buffer;
 
 static struct fb_var_screeninfo vi;
@@ -112,16 +113,35 @@ static gr_surface fbdev_init(minui_backend* backend) {
     //
     // If you have a device that actually *needs* another pixel format
     // (ie, BGRX, or 565), patches welcome...
-
-    printf("fb0 reports (possibly inaccurate):\n"
-           "  vi.bits_per_pixel = %d\n"
-           "  vi.red.offset   = %3d   .length = %3d\n"
-           "  vi.green.offset = %3d   .length = %3d\n"
-           "  vi.blue.offset  = %3d   .length = %3d\n",
-           vi.bits_per_pixel,
-           vi.red.offset, vi.red.length,
-           vi.green.offset, vi.green.length,
-           vi.blue.offset, vi.blue.length);
+    vi.bits_per_pixel = 32;
+    #if defined(RECOVERY_BGRA)
+        vi.red.offset     = 8;
+        vi.red.length     = 8;
+        vi.green.offset   = 16;
+        vi.green.length   = 8;
+        vi.blue.offset    = 24;
+        vi.blue.length    = 8;
+        vi.transp.offset  = 0;
+        vi.transp.length  = 8;
+    #elif defined(RECOVERY_RGBX)
+        vi.red.offset     = 0;
+        vi.red.length     = 8;
+        vi.green.offset   = 8;
+        vi.green.length   = 8;
+        vi.blue.offset    = 16;
+        vi.blue.length    = 8;
+        vi.transp.offset  = 24;
+        vi.transp.length  = 8;
+    #else // default use RGBA
+        vi.red.offset     = 0;
+        vi.red.length     = 8;
+        vi.green.offset   = 8;
+        vi.green.length   = 8;
+        vi.blue.offset    = 16;
+        vi.blue.length    = 8;
+        vi.transp.offset  = 24;
+        vi.transp.length  = 8;
+    #endif
 
     bits = mmap(0, fi.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (bits == MAP_FAILED) {
@@ -132,30 +152,49 @@ static gr_surface fbdev_init(minui_backend* backend) {
 
     memset(bits, 0, fi.smem_len);
 
-    gr_framebuffer[0].width = vi.xres;
-    gr_framebuffer[0].height = vi.yres;
+    #if defined (RECOVERY_ROTATE_90) || defined (RECOVERY_ROTATE_270)
+        gr_framebuffer[0].width = vi.yres;
+        gr_framebuffer[0].height = vi.xres;
+    #else
+        gr_framebuffer[0].width = vi.xres;
+        gr_framebuffer[0].height = vi.yres;
+    #endif
     gr_framebuffer[0].row_bytes = fi.line_length;
     gr_framebuffer[0].pixel_bytes = vi.bits_per_pixel / 8;
     gr_framebuffer[0].data = bits;
-    memset(gr_framebuffer[0].data, 0, gr_framebuffer[0].height * gr_framebuffer[0].row_bytes);
+
+    memset(gr_framebuffer[0].data, 0, vi.yres * gr_framebuffer[0].row_bytes);
 
     /* check if we can use double buffering */
     if (vi.yres * fi.line_length * 2 <= fi.smem_len) {
         double_buffered = true;
 
+        // set temp_buffer to draw
+        #if defined (RECOVERY_ROTATE_90) || defined (RECOVERY_ROTATE_270)
+            temp_buffer[0].height = vi.xres;
+            temp_buffer[0].width = vi.yres;
+            temp_buffer[0].row_bytes = fi.line_length*vi.yres/vi.xres;
+        #else
+            temp_buffer[0].height = vi.yres;
+            temp_buffer[0].width = vi.xres;
+            temp_buffer[0].row_bytes = fi.line_length;
+        #endif
+
+        temp_buffer[0].pixel_bytes = vi.bits_per_pixel / 8;
+        temp_buffer[0].data = (char*)malloc(vi.yres * gr_framebuffer[0].row_bytes);
+        memset(temp_buffer[0].data, 0, vi.yres * gr_framebuffer[0].row_bytes);
+
         memcpy(gr_framebuffer+1, gr_framebuffer, sizeof(GRSurface));
+
         gr_framebuffer[1].data = gr_framebuffer[0].data +
-            gr_framebuffer[0].height * gr_framebuffer[0].row_bytes;
-
-        gr_draw = gr_framebuffer+1;
-
+            vi.yres * gr_framebuffer[0].row_bytes;
+        gr_draw = temp_buffer;
     } else {
         double_buffered = false;
 
         // Without double-buffering, we allocate RAM for a buffer to
         // draw in, and then "flipping" the buffer consists of a
         // memcpy from the buffer we allocated to the framebuffer.
-
         gr_draw = (GRSurface*) malloc(sizeof(GRSurface));
         memcpy(gr_draw, gr_framebuffer, sizeof(GRSurface));
         gr_draw->data = (unsigned char*) malloc(gr_draw->height * gr_draw->row_bytes);
@@ -165,11 +204,9 @@ static gr_surface fbdev_init(minui_backend* backend) {
         }
     }
 
-    memset(gr_draw->data, 0, gr_draw->height * gr_draw->row_bytes);
+    memset(gr_draw->data, 0, vi.yres * gr_draw->row_bytes);
     fb_fd = fd;
     set_displayed_framebuffer(0);
-
-    printf("framebuffer: %d (%d x %d)\n", fb_fd, gr_draw->width, gr_draw->height);
 
     fbdev_blank(backend, true);
     fbdev_blank(backend, false);
@@ -177,30 +214,103 @@ static gr_surface fbdev_init(minui_backend* backend) {
     return gr_draw;
 }
 
+// static gr_surface fbdev_flip(minui_backend* backend __unused) {
 static gr_surface fbdev_flip(minui_backend* backend __unused) {
     if (double_buffered) {
-        // Change gr_draw to point to the buffer currently displayed,
-        // then flip the driver so we're displaying the other buffer
-        // instead.
-        gr_draw = gr_framebuffer + displayed_buffer;
-        set_displayed_framebuffer(1-displayed_buffer);
-    } else {
-        // Copy from the in-memory surface to the framebuffer.
 
-#if defined(RECOVERY_BGRA)
-        unsigned int idx;
-        unsigned char* ucfb_vaddr = (unsigned char*)gr_framebuffer[0].data;
-        unsigned char* ucbuffer_vaddr = (unsigned char*)gr_draw->data;
-        for (idx = 0 ; idx < (gr_draw->height * gr_draw->row_bytes); idx += 4) {
-            ucfb_vaddr[idx    ] = ucbuffer_vaddr[idx + 2];
-            ucfb_vaddr[idx + 1] = ucbuffer_vaddr[idx + 1];
-            ucfb_vaddr[idx + 2] = ucbuffer_vaddr[idx    ];
-            ucfb_vaddr[idx + 3] = ucbuffer_vaddr[idx + 3];
-        }
-#else
-        memcpy(gr_framebuffer[0].data, gr_draw->data,
-               gr_draw->height * gr_draw->row_bytes);
-#endif
+        #if defined(RECOVERY_ROTATE_90)
+            unsigned int i = 0,  j = 0;
+
+            unsigned int *src, *dest;
+            src = (unsigned int *)gr_draw->data;
+            dest = (unsigned int *)gr_framebuffer[1-displayed_buffer].data;
+
+            #if defined(RECOVERY_RGBX)
+                for (i = 0; i < vi.xres; i++) {
+                    for (j = 0; j < vi.yres; j++) {
+                        dest[vi.xres - 1 + vi.xres*j - i] = src[vi.yres * i + j] | 0xff000000;
+                    }
+                }
+            #else
+                for (i = 0; i < vi.xres; i++) {
+                    for (j = 0; j < vi.yres; j++) {
+                        dest[vi.xres - 1 + vi.xres*j-i] = src[vi.yres * i+j];
+                    }
+                }
+            #endif
+
+        #elif defined(RECOVERY_ROTATE_180)
+            unsigned int i = 0,  max = 0;
+            max = gr_draw->height * gr_draw->width;
+
+            unsigned int *src, *dest;
+            src = (unsigned int *)gr_draw->data;
+            dest = (unsigned int *)gr_framebuffer[1-displayed_buffer].data;
+
+            #if defined(RECOVERY_RGBX)
+                for (max; max > 0; max--, i++) {
+                    dest[max - 1] = src[i] | 0xff000000;
+                }
+            #else
+                for (max; max > 0; max--, i++) {
+                    dest[max - 1] = src[i];
+                }
+            #endif
+
+        #elif defined(RECOVERY_ROTATE_270)
+            unsigned int i = 0,  j = 0;
+            unsigned int *src, *dest;
+            src = (unsigned int *)gr_draw->data;
+            dest = (unsigned int *)gr_framebuffer[1-displayed_buffer].data;
+
+            #if defined(RECOVERY_RGBX)
+                for (i = 0; i < vi.xres; i++) {
+                    for (j = 0; j < vi.yres; j++) {
+                        dest[vi.xres * (vi.yres-1) - vi.xres*j + i]  =  src[vi.yres * i + j] | 0xff000000;
+                    }
+                }
+            #else
+                for (i = 0; i < vi.xres; i++) {
+                    for (j = 0; j < vi.yres; j++) {
+                        dest[vi.xres * (vi.yres-1) - vi.xres*j + i]  =  src[vi.yres * i + j];
+                    }
+                }
+            #endif
+
+        #else
+            int i=0, j=0;
+            #if defined(RECOVERY_RGBX)
+                for (i = 0; i < vi.yres; i++) {
+                    for (j = 0; j < vi.xres; j++) {
+                        *((unsigned int *)gr_draw->data+ gr_draw->width * i + j) |= 0xff000000;
+                    }
+                }
+                memcpy(gr_framebuffer[0].data, gr_draw->data,
+                    gr_framebuffer[0].row_bytes * vi.yres);
+            #else
+                memcpy(gr_framebuffer[0].data, gr_draw->data,
+                    gr_framebuffer[0].row_bytes * vi.yres);
+            #endif
+        #endif
+
+        set_displayed_framebuffer(1-displayed_buffer);
+    }
+    else {// if single buffer
+        // Copy from the in-memory surface to the framebuffer.
+        #if defined(RECOVERY_BGRA)
+            unsigned int idx;
+            unsigned char* ucfb_vaddr = (unsigned char*)gr_framebuffer[0].data;
+            unsigned char* ucbuffer_vaddr = (unsigned char*)gr_draw->data;
+            for (idx = 0 ; idx < (gr_draw->height * gr_draw->row_bytes); idx += 4) {
+                ucfb_vaddr[idx    ] = ucbuffer_vaddr[idx + 2];
+                ucfb_vaddr[idx + 1] = ucbuffer_vaddr[idx + 1];
+                ucfb_vaddr[idx + 2] = ucbuffer_vaddr[idx    ];
+                ucfb_vaddr[idx + 3] = ucbuffer_vaddr[idx + 3];
+            }
+        #else
+            memcpy(gr_framebuffer[0].data, gr_draw->data,
+                gr_draw->height * gr_draw->row_bytes);
+        #endif
     }
     return gr_draw;
 }
