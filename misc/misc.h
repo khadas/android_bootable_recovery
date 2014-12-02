@@ -20,4 +20,7 @@
 // Api for recovery write key
 int RecoveryWriteKey(const char *keyOptarg);
 
+// Api for recovery secure check
+int RecoverySecureCheck(const char *zipPath);
+
 #endif  /* _MISC_H_ */
