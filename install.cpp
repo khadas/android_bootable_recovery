@@ -33,6 +33,7 @@
 #include "roots.h"
 #include "verifier.h"
 #include "ui.h"
+#include "misc/misc.h"
 
 extern RecoveryUI* ui;
 
@@ -201,6 +202,17 @@ really_install_package(const char *path, int* wipe_cache, bool needs_mount)
         } else {
             ensure_path_mounted(path);
         }
+    }
+
+    /* Try to secure check.
+     */
+    int check = RecoverySecureCheck(path);
+    if (check <= 0) {
+        ui->Print("Secure check failed. %s\n\n",
+            !check ? "(Not match)" : "");
+        return INSTALL_CORRUPT;
+    } else if (check == 1) {
+        ui->Print("Secure check complete.\n\n");
     }
 
     MemMapping map;

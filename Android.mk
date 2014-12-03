@@ -40,7 +40,8 @@ LOCAL_SRC_FILES := \
     verifier.cpp \
     adb_install.cpp \
     fuse_sdcard_provider.c \
-    misc/key.cpp
+    misc/key.cpp \
+    misc/security.cpp
 
 LOCAL_MODULE := recovery
 
