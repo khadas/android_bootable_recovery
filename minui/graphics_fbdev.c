@@ -291,6 +291,10 @@ static gr_surface fbdev_flip(minui_backend* backend __unused) {
                 memcpy(gr_framebuffer[0].data, gr_draw->data,
                     gr_framebuffer[0].row_bytes * vi.yres);
             #endif
+            // Change gr_draw to point to the buffer currently displayed,
+            // then flip the driver so we're displaying the other buffer
+            // instead.
+            gr_draw = gr_framebuffer + displayed_buffer;
         #endif
 
         set_displayed_framebuffer(1-displayed_buffer);
