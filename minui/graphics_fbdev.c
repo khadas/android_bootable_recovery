@@ -181,7 +181,7 @@ static gr_surface fbdev_init(minui_backend* backend) {
         #endif
 
         temp_buffer[0].pixel_bytes = vi.bits_per_pixel / 8;
-        temp_buffer[0].data = (char*)malloc(vi.yres * gr_framebuffer[0].row_bytes);
+        temp_buffer[0].data = (unsigned char *)malloc(vi.yres * gr_framebuffer[0].row_bytes);
         memset(temp_buffer[0].data, 0, vi.yres * gr_framebuffer[0].row_bytes);
 
         memcpy(gr_framebuffer+1, gr_framebuffer, sizeof(GRSurface));

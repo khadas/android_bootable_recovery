@@ -1190,6 +1190,8 @@ char *block_write_data( Value* contents, char * name)
                 printf("write_data to %s partition successful\n", devname);
             }
         } else {
+            printf("start to write %s to %s...\n", name, devname);
+            success = true;
             size_t len =  contents->size;
             fprintf(stderr, "data len = %d\n", len);
             int size =  contents->size;
@@ -1197,8 +1199,14 @@ char *block_write_data( Value* contents, char * name)
             /*fprintf(stderr, "data len = %d pos = %d\n", len, pos);*/
             if (/*lseek(fd, pos, SEEK_SET) != pos ||*/write(fd, contents->data, size) != size) {
                 fprintf(stderr, " write error at 0x%08lx (%s)\n",pos, strerror(errno));
+                success = false;
             }
-            success = true;
+
+            if (!success) {
+                fprintf(stderr, "write_data to %s partition failed: %s\n", devname, strerror(errno));
+            } else {
+                printf("write_data to %s partition successful\n", devname);
+            }
         }
     } else {
         fd = open(devname, O_RDWR);
