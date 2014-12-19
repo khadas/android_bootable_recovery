@@ -726,17 +726,20 @@ browse_directory(const char* path, Device* device) {
 }
 
 static void
-wipe_data(int confirm, Device* device, char* headers[]) {
+wipe_data(int confirm, Device* device, const char* title[]) {
     if (confirm) {
+        char** headers = NULL;
         static const char** title_headers = NULL;
 
         if (title_headers == NULL) {
-            char* def_headers[] = { "Confirm wipe of all user data?",
+            const char* def_title[] = { "Confirm wipe of all user data?",
                                       "  THIS CAN NOT BE UNDONE.",
                                       "",
                                       NULL };
-            if (headers == NULL) {
-                headers = def_headers;
+            if (title == NULL) {
+                headers = (char **)def_title;
+            } else {
+                headers = (char **)title;
             }
             title_headers = prepend_title((const char**)headers);
         }
@@ -769,7 +772,7 @@ wipe_data(int confirm, Device* device, char* headers[]) {
 }
 
 static void
-wipe_data_with_headers(int confirm, Device* device, char* headers[]) {
+wipe_data_with_headers(int confirm, Device* device, const char* headers[]) {
     wipe_data( confirm, device, headers);
 }
 
@@ -1073,7 +1076,6 @@ ui_print(const char* format, ...) {
 int
 main(int argc, char **argv) {
     time_t start = time(NULL);
-
     redirect_stdio(TEMPORARY_LOG_FILE);
 
     // If this binary is started with the single argument "--adbd",
@@ -1246,10 +1248,12 @@ main(int argc, char **argv) {
     if (data_ro_wipe) {
         printf("data_ro_wipe tip\n");
         ui->ShowText(true);
-        char* headers[] = { "Boot fail because data read-only, partition maybe damaged,do you want to wipe data?",
-                                      "THIS CAN NOT BE UNDONE.",
-                                      "",
-                                      NULL };
+        const char* headers[] = {
+                    "Boot failed because data read-only,partition maybe damaged.",
+                    "Do you want to wipe data?",
+                    "  THIS CAN NOT BE UNDONE.",
+                    "",
+                    NULL };
         wipe_data_with_headers(1, device, headers);
         status = INSTALL_SUCCESS;
         ui->ShowText(false);

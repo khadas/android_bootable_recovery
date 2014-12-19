@@ -105,7 +105,7 @@ static void fuse_reply(struct fuse_data* fd, __u64 unique, const void *data, siz
 
     vec[0].iov_base = &hdr;
     vec[0].iov_len = sizeof(hdr);
-    vec[1].iov_base = data;
+    vec[1].iov_base = (char *)data;
     vec[1].iov_len = len;
 
     res = writev(fd->ffd, vec, 2);
