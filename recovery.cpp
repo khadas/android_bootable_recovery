@@ -56,6 +56,7 @@ struct selabel_handle *sehandle;
 static const struct option OPTIONS[] = {
   { "send_intent", required_argument, NULL, 's' },
   { "update_package", required_argument, NULL, 'u' },
+  { "update_patch", required_argument, NULL, 'e' },
   { "wipe_data", no_argument, NULL, 'w' },
   { "wipe_cache", no_argument, NULL, 'c' },
   { "show_text", no_argument, NULL, 't' },
@@ -1099,6 +1100,7 @@ main(int argc, char **argv) {
 
     const char *send_intent = NULL;
     const char *update_package = NULL;
+    const char *update_patch = NULL;
     int wipe_data = 0, wipe_cache = 0, show_text = 0;
     bool just_exit = false;
     bool shutdown_after = false;
@@ -1110,6 +1112,7 @@ main(int argc, char **argv) {
         switch (arg) {
         case 's': send_intent = optarg; break;
         case 'u': update_package = optarg; break;
+        case 'e': update_patch = optarg; break;
         case 'w': wipe_data = wipe_cache = 1; break;
         case 'c': wipe_cache = 1; break;
         case 't': show_text = 1; break;
@@ -1202,6 +1205,22 @@ main(int argc, char **argv) {
                 LOGE("Cache wipe (requested by package) failed.");
             }
         }
+        if (status != INSTALL_SUCCESS) {
+            ui->Print("Installation aborted.\n");
+
+            // If this is an eng or userdebug build, then automatically
+            // turn the text display on if the script fails so the error
+            // message is visible.
+            char buffer[PROPERTY_VALUE_MAX+1];
+            property_get("ro.build.fingerprint", buffer, "");
+            if (strstr(buffer, ":userdebug/") || strstr(buffer, ":eng/")) {
+                ui->ShowText(true);
+            }
+        }
+    }
+
+    if (update_patch != NULL) {
+        status = install_package(update_patch, &wipe_cache, TEMPORARY_INSTALL_FILE, true);
         if (status != INSTALL_SUCCESS) {
             ui->Print("Installation aborted.\n");
 
