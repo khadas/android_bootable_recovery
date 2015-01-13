@@ -511,6 +511,66 @@ Value* SetProgressFn(const char* name, State* state, int argc, Expr* argv[]) {
     return StringValue(frac_str);
 }
 
+static time_t GetTimestamp(const ZipArchive* pZipArchive) {
+    bool success = false;
+    long metaFileSize = 0;
+    static time_t time = 0;
+    unsigned char *metaBuf = NULL;
+    const char *METADATA = "META-INF/com/android/metadata";
+
+    if (time > 0)
+        return time;
+
+    const ZipEntry *pZipEntry = mzFindZipEntry(pZipArchive, METADATA);
+    if (pZipEntry == NULL) {
+        printf("can't find %s in ota package\n", METADATA);
+        return -1;
+    }
+
+    metaFileSize = mzGetZipEntryUncompLen(pZipEntry);
+    if (metaFileSize <= 0) {
+        printf("can't get %s entry uncomp len\n", METADATA);
+        return -1;
+    }
+
+    metaBuf = (unsigned char *)calloc(metaFileSize, sizeof(unsigned char));
+    if (!metaBuf) {
+        printf("can't calloc %ld size space memory (%s)\n",
+            metaFileSize, strerror(errno));
+        return -1;
+    }
+
+    success = mzExtractZipEntryToBuffer(pZipArchive, pZipEntry, metaBuf);
+    if (!success) {
+        printf("can't extract %s datas entry to buffer\n", METADATA);
+        if (metaBuf) {
+            free(metaBuf);
+        }
+        return -1;
+    }
+
+    char *row;
+    row = strtok((char *)metaBuf, "\n");
+    while (row != NULL) {
+        if (strstr(row, "post-timestamp")) {
+            // post-timestamp=1419578085
+            char *timebuf = row + strlen("post-timestamp=");
+            time = strtoul(timebuf, 0, 10);
+            if (time == ERANGE || time < 0) {
+                time = -1;
+            }
+            break;
+        }
+        row = strtok(NULL, "\n");
+    }
+
+    if (metaBuf) {
+        free(metaBuf);
+    }
+
+    return time;
+}
+
 // package_extract_dir(package_path, destination_path)
 Value* PackageExtractDirFn(const char* name, State* state,
                           int argc, Expr* argv[]) {
@@ -523,8 +583,18 @@ Value* PackageExtractDirFn(const char* name, State* state,
 
     ZipArchive* za = ((UpdaterInfo*)(state->cookie))->package_zip;
 
-    // To create a consistent system image, never use the clock for timestamps.
-    struct utimbuf timestamp = { 1217592000, 1217592000 };  // 8/1/2008 default
+    struct utimbuf timestamp;
+    time_t time = GetTimestamp(za);
+    if (time > 0) {
+        // To create a consistent system image, use the clock for post-timestamp
+        // from META-INF/com/android/metadata.
+        timestamp.actime = time;
+        timestamp.modtime = time;
+    } else {
+        // To create a consistent system image, never use the clock for timestamps.
+        timestamp.actime = 1217592000;  // 8/1/2008 default
+        timestamp.modtime = 1217592000;
+    }
 
     bool success = mzExtractRecursive(za, zip_path, dest_path,
                                       MZ_EXTRACT_FILES_ONLY, &timestamp,
