@@ -1244,9 +1244,6 @@ main(int argc, char **argv) {
     } else if (wipe_cache) {
         if (wipe_cache && erase_volume("/cache")) status = INSTALL_ERROR;
         if (status != INSTALL_SUCCESS) ui->Print("Cache wipe failed.\n");
-    } else if (!just_exit) {
-        status = INSTALL_NONE;  // No command specified
-        ui->SetBackground(RecoveryUI::NO_COMMAND);
     }
 
     // Recovery write keys
@@ -1279,7 +1276,9 @@ main(int argc, char **argv) {
     }
 
     Device::BuiltinAction after = shutdown_after ? Device::SHUTDOWN : Device::REBOOT;
-    if (status != INSTALL_SUCCESS || ui->IsTextVisible()) {
+    if (just_exit) {
+        after = Device::REBOOT;
+    } else if (status != INSTALL_SUCCESS || ui->IsTextVisible()) {
         ui->ShowText(true);
         Device::BuiltinAction temp = prompt_and_wait(device, status);
         if (temp != Device::NO_ACTION) after = temp;
