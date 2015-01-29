@@ -344,6 +344,48 @@ get_args(int *argc, char ***argv) {
 }
 
 static void
+factory_reset_poweroff_protect(int *argc, char ***argv) {
+    const char *param = NULL;
+    const char *wipe_data = get_bootloader_env("wipe_data");
+    const char *wipe_cache = get_bootloader_env("wipe_cache");
+
+    if ((wipe_data != NULL) && !strcmp(wipe_data, "failed")) {
+        param = "--wipe_data";
+    } else if((wipe_cache != NULL) && !strcmp(wipe_cache, "failed")) {
+        param = "--wipe_cache";
+    }
+
+    if (param != NULL) {
+        char *argv0 = (*argv)[0];
+        *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
+        (*argv)[0] = argv0;  // use the same program name
+        (*argv)[1] = (char *)param;
+        *argc = 2;
+    }
+}
+
+static void
+factory_reset_poweroff_env_set(
+    const char *volume, const int flag) {
+    if (volume == NULL ||
+        (strcmp(volume, "/data") && strcmp(volume, "/cache"))) {
+        return;
+    }
+
+    const char *env_name = NULL;
+    const char *env_val = flag ? "successful" : "failed";
+    if (!strcmp(volume, "/data")) {
+        env_name = "wipe_data";
+    } else {
+        env_name = "wipe_cache";
+    }
+
+    int ret = set_bootloader_env(env_name, env_val);
+    printf("setenv %s=%s %s.(%d)\n", env_name, env_val,
+        (ret < 0) ? "failed" : "successful", ret);
+}
+
+static void
 set_sdcard_update_bootloader_message() {
     struct bootloader_message boot;
     memset(&boot, 0, sizeof(boot));
@@ -461,6 +503,7 @@ typedef struct _saved_log_file {
 
 static int
 erase_volume(const char *volume) {
+    factory_reset_poweroff_env_set(volume, 0);
     bool is_cache = (strcmp(volume, CACHE_ROOT) == 0);
 
     ui->SetBackground(RecoveryUI::ERASING);
@@ -539,6 +582,8 @@ erase_volume(const char *volume) {
         tmplog_offset = 0;
         copy_logs();
     }
+
+    factory_reset_poweroff_env_set(volume, 1);
 
     return result;
 }
@@ -1097,6 +1142,7 @@ main(int argc, char **argv) {
     ensure_path_mounted(LAST_LOG_FILE);
     rotate_last_logs(KEEP_LOG_COUNT);
     get_args(&argc, &argv);
+    factory_reset_poweroff_protect(&argc, &argv);
 
     const char *send_intent = NULL;
     const char *update_package = NULL;
