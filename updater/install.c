@@ -47,6 +47,7 @@
 #include "updater.h"
 #include "install.h"
 #include "ubootenv/uboot_env.h"
+#include "tune2fs.h"
 
 #ifdef USE_EXT4
 #include "make_ext4fs.h"
@@ -1909,6 +1910,37 @@ done:
     return StringValue(result);
 }
 
+Value* Tune2FsFn(const char* name, State* state, int argc, Expr* argv[]) {
+    if (argc == 0) {
+        return ErrorAbort(state, "%s() expects args, got %d", name, argc);
+    }
+
+    char** args = ReadVarArgs(state, argc, argv);
+    if (args == NULL) {
+        return ErrorAbort(state, "%s() could not read args", name);
+    }
+
+    int i;
+    char** args2 = malloc(sizeof(char*) * (argc+1));
+    // Tune2fs expects the program name as its args[0]
+    args2[0] = strdup(name);
+    for (i = 0; i < argc; ++i) {
+       args2[i + 1] = args[i];
+    }
+    int result = tune2fs_main(argc + 1, args2);
+    for (i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
+    free(args);
+
+    free(args2[0]);
+    free(args2);
+    if (result != 0) {
+        return ErrorAbort(state, "%s() returned error code %d", name, result);
+    }
+    return StringValue(strdup("t"));
+}
+
 void RegisterInstallFunctions() {
     RegisterFunction("mount", MountFn);
     RegisterFunction("is_mounted", IsMountedFn);
@@ -1961,4 +1993,5 @@ void RegisterInstallFunctions() {
     RegisterFunction("enable_reboot", EnableRebootFn);
 
     RegisterFunction("set_bootloader_env", SetBootloaderEnvFn);
+    RegisterFunction("tune2fs", Tune2FsFn);
 }

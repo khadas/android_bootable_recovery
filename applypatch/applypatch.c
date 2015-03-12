@@ -468,6 +468,22 @@ int WriteToPartition(unsigned char* data, size_t len,
                     printf("fsync of \"%s\" failed: %s\n", partition, strerror(errno));
                     return -1;
                 }
+                if (fsync(fd) != 0) {
+                   printf("failed to sync to %s (%s)\n",
+                          partition, strerror(errno));
+                   return -1;
+                }
+                if (close(fd) != 0) {
+                   printf("failed to close %s (%s)\n",
+                          partition, strerror(errno));
+                   return -1;
+                }
+                fd = open(partition, O_RDONLY);
+                if (fd < 0) {
+                   printf("failed to reopen %s for verify (%s)\n",
+                          partition, strerror(errno));
+                   return -1;
+                }
 
                 // drop caches so our subsequent verification read
                 // won't just be reading the cache.
