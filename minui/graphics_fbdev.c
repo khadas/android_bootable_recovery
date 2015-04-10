@@ -104,6 +104,29 @@ static gr_surface fbdev_init(minui_backend* backend) {
         return NULL;
     }
 
+    // set 32 RGBA
+    vi.bits_per_pixel = 32;
+    vi.red.offset     = 0;
+    vi.red.length     = 8;
+    vi.green.offset   = 8;
+    vi.green.length   = 8;
+    vi.blue.offset    = 16;
+    vi.blue.length    = 8;
+    vi.transp.offset  = 24;
+    vi.transp.length  = 8;
+
+    if (ioctl (fd, FBIOPUT_VSCREENINFO, &vi) < 0) {
+        perror("failed to put fb0 info!");
+        close(fd);
+        return NULL;
+    }
+
+    if (ioctl(fd, FBIOGET_VSCREENINFO, &vi) < 0) {
+        perror("failed to get fb0 info");
+        close(fd);
+        return NULL;
+    }
+
     // We print this out for informational purposes only, but
     // throughout we assume that the framebuffer device uses an RGBX
     // pixel format.  This is the case for every development device I
