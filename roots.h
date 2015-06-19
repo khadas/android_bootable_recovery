@@ -46,6 +46,9 @@ int format_volume(const char* volume);
 // mounted (/tmp and /cache) are mounted.  Returns 0 on success.
 int setup_install_mounts();
 
+//clear instaboot image
+int instaboot_clear();
+int instaboot_disable();
 #ifdef __cplusplus
 }
 #endif

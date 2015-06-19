@@ -860,6 +860,7 @@ wipe_data(int confirm, Device* device, const char* title[]) {
 
     ui->Print("\n-- Wiping data...\n");
     device->WipeData();
+    instaboot_clear();
     erase_volume("/data");
     erase_volume("/cache");
     ui->Print("Data wipe complete.\n");
@@ -1024,6 +1025,8 @@ static int ext_update(Device* device, int wipe_cache) {
 
     ui->Print("\n-- Install %s ...\n", update_package);
     set_sdcard_update_bootloader_message();
+    instaboot_disable();
+    instaboot_clear();
     status = install_package(update_package, &wipe_cache, TEMPORARY_INSTALL_FILE, true);
 
     if (status == INSTALL_SUCCESS && wipe_cache) {
@@ -1059,6 +1062,8 @@ static int cache_update(Device* device, int wipe_cache) {
 
     ui->Print("\n-- Install %s ...\n", update_package);
     set_sdcard_update_bootloader_message();
+    instaboot_disable();
+    instaboot_clear();
     status = install_package(update_package, &wipe_cache, TEMPORARY_INSTALL_FILE, true);
     if (status == INSTALL_SUCCESS && wipe_cache) {
         ui->Print("\n-- Wiping cache (at package request)...\n");
@@ -1334,6 +1339,8 @@ main(int argc, char **argv) {
     int status = INSTALL_SUCCESS;
 
     if (update_package != NULL) {
+        instaboot_disable();
+        instaboot_clear();
         status = install_package(update_package, &wipe_cache, TEMPORARY_INSTALL_FILE, true);
         if (status == INSTALL_SUCCESS && wipe_cache) {
             if (erase_volume("/cache")) {
@@ -1356,6 +1363,8 @@ main(int argc, char **argv) {
     }
 
     if (update_patch != NULL) {
+        instaboot_disable();
+        instaboot_clear();
         status = install_package(update_patch, &wipe_cache, TEMPORARY_INSTALL_FILE, true);
         if (status != INSTALL_SUCCESS) {
             ui->Print("Installation aborted.\n");
@@ -1372,6 +1381,7 @@ main(int argc, char **argv) {
     }
 
     if (wipe_data) {
+        instaboot_clear();
         if (device->WipeData()) status = INSTALL_ERROR;
         if (erase_volume("/data")) status = INSTALL_ERROR;
         if (wipe_cache && erase_volume("/cache")) status = INSTALL_ERROR;

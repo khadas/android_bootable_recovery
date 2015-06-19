@@ -466,3 +466,45 @@ int setup_install_mounts() {
     }
     return 0;
 }
+
+int instaboot_clear() {
+    static bool done = false;
+    const char* swap_dev = "/dev/block/instaboot";
+
+    if (done)
+        return -2;
+
+    int fd = open(swap_dev, O_RDWR);
+
+    if (fd > 0) {
+        char context[2048] = {0};
+        for (int i = 0; i < 8; i++) {
+            if (write(fd, context, sizeof(context)) != sizeof(context)) {
+                LOGE("instaboot: write %s fail!", swap_dev);
+            }
+        }
+        fsync(fd);
+        close(fd);
+        usleep(10000);
+        done = true;
+    } else {
+        LOGW("instaboot: cannot open device");
+    }
+
+    return 0;
+}
+
+int instaboot_disable(){
+    static bool done = false;
+
+    if (done)
+        return -2;
+
+    ensure_path_mounted("/data");
+    unlink("/data/property/persist.sys.instaboot.enable");
+    ensure_path_unmounted("/data");
+
+    done = true;
+
+    return 0;
+}
