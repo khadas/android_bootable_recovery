@@ -255,7 +255,8 @@ int ensure_path_mounted(const char* path) {
         return mtd_mount_partition(partition, v->mount_point, v->fs_type, 0);
     } else if (strcmp(v->fs_type, "ext4") == 0 ||
         strcmp(v->fs_type, "vfat") == 0 ||
-        strcmp(v->fs_type, "auto") == 0) {
+        strcmp(v->fs_type, "auto") == 0 ||
+        strcmp(v->fs_type, "f2fs") == 0) {
         if ((strcmp(v->fs_type, "vfat") == 0 || strstr(v->fs_type, "auto")) &&
             (strstr(v->mount_point, "sdcard") || strstr(v->mount_point, "udisk"))) {
             int time_out = 400000;

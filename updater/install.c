@@ -49,10 +49,8 @@
 #include "ubootenv/uboot_env.h"
 #include "tune2fs.h"
 
-#ifdef USE_EXT4
 #include "make_ext4fs.h"
 #include "wipe.h"
-#endif
 
 #define ARRAY_SIZE(x)  sizeof(x)/sizeof(x[0])
 #define EMMC_USER_PARTITION        "bootloader"
@@ -357,7 +355,6 @@ Value* FormatFn(const char* name, State* state, int argc, Expr* argv[]) {
             goto done;
         }
         result = location;
-#ifdef USE_EXT4
     } else if (strcmp(fs_type, "ext4") == 0) {
         if (strcmp(location, "/dev/block/system") == 0) {
             if (ext4_erase_volum("/system")) {
@@ -392,7 +389,6 @@ Value* FormatFn(const char* name, State* state, int argc, Expr* argv[]) {
             goto done;
         }
         result = location;
-#endif
     } else {
         printf("%s: unsupported fs_type \"%s\" partition_type \"%s\"",
                 name, fs_type, partition_type);
