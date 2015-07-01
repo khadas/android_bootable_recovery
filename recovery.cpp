@@ -61,6 +61,7 @@ static const struct option OPTIONS[] = {
   { "wipe_data", no_argument, NULL, 'w' },
   { "wipe_cache", no_argument, NULL, 'c' },
   { "show_text", no_argument, NULL, 't' },
+  { "force_stop", no_argument, NULL, 'f' },
   { "just_exit", no_argument, NULL, 'x' },
   { "locale", required_argument, NULL, 'l' },
   { "stages", required_argument, NULL, 'g' },
@@ -364,11 +365,23 @@ factory_reset_poweroff_protect(int *argc, char ***argv) {
     }
 
     if (param != NULL) {
+        bool force_stop = false;
+        for (int i = 0; i < *argc; i++) {
+            if (!strcmp((*argv)[i], "--force_stop")) {
+                force_stop = true;
+                break;
+            }
+        }
         char *argv0 = (*argv)[0];
         *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
         (*argv)[0] = argv0;  // use the same program name
         (*argv)[1] = (char *)param;
-        *argc = 2;
+        if (!force_stop) {
+            *argc = 2;
+        } else {
+            (*argv)[2] = (char *)"--force_stop";
+            *argc = 3;
+        }
     }
 }
 
@@ -1045,7 +1058,8 @@ static int ext_update(Device* device, int wipe_cache) {
         } else if (!ui->IsTextVisible()) {
             return 0;   // reboot if logs aren't visible
         } else {
-            ui->Print("\nInstall from %s complete.\n", found_upgrade ? "sdcard" : "udisk");
+            ui->Print("\nInstall from %s complete.\n",
+                (found_upgrade == 1) ? "sdcard" : "udisk");
         }
     }
 
@@ -1242,6 +1256,7 @@ main(int argc, char **argv) {
     const char *update_package = NULL;
     const char *update_patch = NULL;
     int wipe_data = 0, wipe_cache = 0, show_text = 0;
+    bool force_stop = false;
     bool just_exit = false;
     bool shutdown_after = false;
     char *key_optarg = NULL;
@@ -1256,6 +1271,7 @@ main(int argc, char **argv) {
         case 'w': wipe_data = wipe_cache = 1; break;
         case 'c': wipe_cache = 1; break;
         case 't': show_text = 1; break;
+        case 'f': force_stop = true; break;
         case 'x': just_exit = true; break;
         case 'l': locale = optarg; break;
         case 'k': key_optarg = optarg; break;
@@ -1423,7 +1439,7 @@ main(int argc, char **argv) {
     Device::BuiltinAction after = shutdown_after ? Device::SHUTDOWN : Device::REBOOT;
     if (just_exit) {
         after = Device::REBOOT;
-    } else if (status != INSTALL_SUCCESS || ui->IsTextVisible()) {
+    } else if (status != INSTALL_SUCCESS || ui->IsTextVisible() || force_stop) {
         ui->ShowText(true);
         Device::BuiltinAction temp = prompt_and_wait(device, status);
         if (temp != Device::NO_ACTION) after = temp;
