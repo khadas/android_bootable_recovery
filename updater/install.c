@@ -1180,6 +1180,77 @@ static int write_data(int ctx, const char *data, ssize_t len)
     return wrote;
 }
 
+static int write_chrdev_data(
+    const char *dev, const char *data, ssize_t size)
+{
+    int fd = -1;
+    ssize_t wrote = 0;
+    ssize_t readed = 0;
+    char *verify = NULL;
+
+    fd = open(dev, O_RDWR);
+    if (fd < 0) {
+        fprintf(stderr, "open %s failed (%s)\n",
+            dev, strerror(errno));
+        return -1;
+    }
+
+    fprintf(stderr, "data len = %d\n", size);
+    if ((wrote = write(fd, data, size)) != size) {
+        fprintf(stderr, "wrote error, count %d (%s)\n",
+            wrote, strerror(errno));
+        goto err;
+    }
+
+    close(fd);
+    fd = open(dev, O_RDWR);
+    if (fd < 0) {
+        fprintf(stderr, "open %s failed after wrote success (%s)\n",
+            dev, strerror(errno));
+        return -1;
+    }
+
+    verify = malloc(size);
+    if (verify == NULL) {
+        fprintf(stderr, "failed to malloc size=%d (%s)\n",
+            size, strerror(errno));
+        goto err;
+    }
+
+    if ((readed = read(fd, verify, size)) != size) {
+        fprintf(stderr, "readed error, count %d (%s)\n",
+            readed, strerror(errno));
+        if (verify != NULL) {
+            free(verify);
+        }
+        goto err;
+    }
+
+    if (memcmp(data, verify, size) != 0) {
+        fprintf(stderr, "verification error, wrote != readed\n");
+        if (verify != NULL) {
+            free(verify);
+        }
+        goto err;
+    }
+
+    fprintf(stderr, " successfully wrote data\n");
+    if (verify != NULL) {
+        free(verify);
+    }
+
+    if (fd > 0) {
+        close(fd);
+    }
+    return wrote;
+
+err:
+    if (fd > 0) {
+        close(fd);
+    }
+    return -1;
+}
+
 //Ignore mbr since mmc driver already handled
 //#define MMC_UBOOT_CLEAR_MBR
 
@@ -1456,6 +1527,81 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
 
 done:
     if (result != partition) FreeValue(partition_value);
+    FreeValue(contents);
+    return StringValue(result);
+}
+
+Value* WriteDtbImageFn(const char* name, State* state, int argc, Expr* argv[]) {
+    char* result = NULL;
+    bool success = false;
+    Value* contents = NULL;
+
+    if (ReadValueArgs(state, argv, 1, &contents) < 0) {
+        fprintf(stderr, "%s: ReadValueArgs failed (%s)\n",
+            name, strerror(errno));
+        return NULL;
+    }
+
+    const char *DTB_DEV=  "/dev/dtb";
+    // write 256K dtb datas to dtb device maximum,kernel limit
+    const int DTB_DATA_MAX =  256*1024;
+    printf("\nstart to write dtb.img to %s...\n", DTB_DEV);
+
+    if (contents->type == VAL_BLOB) {
+        printf("contents type: VAL_BLOB\ncontents size: %d\n",
+            contents->size);
+        if (contents->size > DTB_DATA_MAX) {
+            fprintf(stderr, "data size(%d) out of range size(max:%d)\n",
+                contents->size, DTB_DATA_MAX);
+            result = strdup("");
+            goto done;
+        }
+        ssize_t wrote = write_chrdev_data(
+            DTB_DEV, contents->data, contents->size);
+        success = (wrote == contents->size);
+    } else {
+        printf("contents type: VAL_STRING\ncontents size: %d\n",
+            contents->size);
+        char* filename = contents->data;
+        FILE* f = fopen(filename, "rb");
+        if (f == NULL) {
+            fprintf(stderr, "can't open %s: %s\n",
+                filename, strerror(errno));
+            result = strdup("");
+            goto done;
+        }
+
+        char* buffer = malloc(DTB_DATA_MAX+256);
+        if (buffer == NULL) {
+            fprintf(stderr, "can't malloc (%s)\n", strerror(errno));
+            result = strdup("");
+            goto done;
+        }
+
+        int readsize = 0;
+        readsize = fread(buffer, 1, DTB_DATA_MAX+256, f);
+        if (readsize > DTB_DATA_MAX) {
+            fprintf(stderr, "data size(%d) out of range size(max:%d)\n",
+                readsize, DTB_DATA_MAX);
+            result = strdup("");
+        }
+        int wrote = write_chrdev_data(DTB_DEV, buffer, readsize);
+        success = (wrote == readsize);
+        free(buffer);
+        fclose(f);
+    }
+
+    if (!success) {
+        fprintf(stderr, "write_data to %s failed (%s)\n",
+            DTB_DEV, strerror(errno));
+    } else {
+        printf("write_data to %s successful\n",
+            DTB_DEV);
+    }
+
+    result = success ? strdup("dtb") : strdup("");
+
+done:
     FreeValue(contents);
     return StringValue(result);
 }
@@ -1965,6 +2111,7 @@ void RegisterInstallFunctions() {
     RegisterFunction("getprop", GetPropFn);
     RegisterFunction("file_getprop", FileGetPropFn);
     RegisterFunction("write_raw_image", WriteRawImageFn);
+    RegisterFunction("write_dtb_image", WriteDtbImageFn);
 
     RegisterFunction("apply_patch", ApplyPatchFn);
     RegisterFunction("apply_patch_check", ApplyPatchCheckFn);
