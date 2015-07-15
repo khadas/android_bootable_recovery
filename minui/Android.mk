@@ -43,3 +43,20 @@ else
 endif
 
 include $(BUILD_STATIC_LIBRARY)
+
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := test_gr
+LOCAL_FORCE_STATIC_EXECUTABLE := true
+LOCAL_MODULE_TAGS := tests
+LOCAL_CFLAGS += -DNO_RECOVERY_MOUNT
+LOCAL_CFLAGS += -Wno-unused-parameter
+LOCAL_SRC_FILES := \
+    test_gr.c
+LOCAL_STATIC_LIBRARIES := \
+    libminui \
+    libpng \
+    libz \
+    libm \
+    libc
+include $(BUILD_EXECUTABLE)

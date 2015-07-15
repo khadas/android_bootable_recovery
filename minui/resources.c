@@ -45,7 +45,7 @@ static gr_surface malloc_surface(size_t data_size) {
 }
 
 static int open_png(const char* name, png_structp* png_ptr, png_infop* info_ptr,
-                    png_uint_32* width, png_uint_32* height, png_byte* channels) {
+                    png_uint_32* width, png_uint_32* height, png_byte* channels, int *alpha) {
     char resPath[256];
     unsigned char header[8];
     int result = 0;
@@ -93,9 +93,7 @@ static int open_png(const char* name, png_structp* png_ptr, png_infop* info_ptr,
     int color_type, bit_depth;
     png_get_IHDR(*png_ptr, *info_ptr, width, height, &bit_depth,
             &color_type, NULL, NULL, NULL);
-
     *channels = png_get_channels(*png_ptr, *info_ptr);
-
     if (bit_depth == 8 && *channels == 3 && color_type == PNG_COLOR_TYPE_RGB) {
         // 8-bit RGB images: great, nothing to do.
     } else if (bit_depth <= 8 && *channels == 1 && color_type == PNG_COLOR_TYPE_GRAY) {
@@ -108,6 +106,11 @@ static int open_png(const char* name, png_structp* png_ptr, png_infop* info_ptr,
         // general.
         png_set_palette_to_rgb(*png_ptr);
         *channels = 3;
+        if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
+            png_set_tRNS_to_alpha(png_ptr);
+            *alpha = 1;
+        }
+
     } else {
         fprintf(stderr, "minui doesn't support PNG depth %d channels %d color_type %d\n",
                 bit_depth, *channels, color_type);
@@ -147,6 +150,7 @@ static gr_surface init_display_surface(png_uint_32 width, png_uint_32 height) {
     surface->height = height;
     surface->row_bytes = width * 4;
     surface->pixel_bytes = 4;
+    surface->alpha = 0;
 
     return surface;
 }
@@ -162,7 +166,7 @@ static gr_surface init_display_surface(png_uint_32 width, png_uint_32 height) {
 // 'width' is the number of pixels in the row.
 static void transform_rgb_to_draw(unsigned char* input_row,
                                   unsigned char* output_row,
-                                  int channels, int width) {
+                                  int channels, int width, int alpha) {
     int x;
     unsigned char* ip = input_row;
     unsigned char* op = output_row;
@@ -180,12 +184,16 @@ static void transform_rgb_to_draw(unsigned char* input_row,
             break;
 
         case 3:
-            // expand RGBA to RGBX
-            for (x = 0; x < width; ++x) {
-                *op++ = *ip++;
-                *op++ = *ip++;
-                *op++ = *ip++;
-                *op++ = 0xff;
+            if (alpha == 0) {
+                // expand RGBA to RGBX
+                for (x = 0; x < width; ++x) {
+                    *op++ = *ip++;
+                    *op++ = *ip++;
+                    *op++ = *ip++;
+                   *op++ = 0xff;
+                }
+            } else {
+                memcpy(output_row, input_row, width*4);
             }
             break;
 
@@ -203,10 +211,11 @@ int res_create_display_surface(const char* name, gr_surface* pSurface) {
     png_infop info_ptr = NULL;
     png_uint_32 width, height;
     png_byte channels;
+    int alpha = 0;
 
     *pSurface = NULL;
 
-    result = open_png(name, &png_ptr, &info_ptr, &width, &height, &channels);
+    result = open_png(name, &png_ptr, &info_ptr, &width, &height, &channels, &alpha);
     if (result < 0) return result;
 
     surface = init_display_surface(width, height);
@@ -214,14 +223,25 @@ int res_create_display_surface(const char* name, gr_surface* pSurface) {
         result = -8;
         goto exit;
     }
+    surface->alpha = alpha;
 
-    unsigned char* p_row = malloc(width * 4);
-    unsigned int y;
-    for (y = 0; y < height; ++y) {
-        png_read_row(png_ptr, p_row, NULL);
-        transform_rgb_to_draw(p_row, surface->data + y * surface->row_bytes, channels, width);
+    if (channels == 4 || (channels == 3 && alpha == 1)) {
+        unsigned char* p_row;
+        unsigned int y;
+        for (y = 0; y < height; ++y) {
+            p_row = surface->data + y * surface->row_bytes;
+            png_read_row(png_ptr, p_row, NULL);
+        }
+    } else {
+        unsigned char* p_row = malloc(width * 4);
+        unsigned int y;
+        for (y = 0; y < height; ++y) {
+            png_read_row(png_ptr, p_row, NULL);
+            transform_rgb_to_draw(p_row, surface->data + y * surface->row_bytes, channels, width, alpha);
+        }
+
+        free(p_row);
     }
-    free(p_row);
 
     *pSurface = surface;
 
@@ -238,12 +258,13 @@ int res_create_multi_display_surface(const char* name, int* frames, gr_surface**
     png_infop info_ptr = NULL;
     png_uint_32 width, height;
     png_byte channels;
+    int alpha = 0;
     int i;
 
     *pSurface = NULL;
     *frames = -1;
 
-    result = open_png(name, &png_ptr, &info_ptr, &width, &height, &channels);
+    result = open_png(name, &png_ptr, &info_ptr, &width, &height, &channels, &alpha);
     if (result < 0) return result;
 
     *frames = 1;
@@ -285,7 +306,7 @@ int res_create_multi_display_surface(const char* name, int* frames, gr_surface**
         int frame = y % *frames;
         unsigned char* out_row = surface[frame]->data +
             (y / *frames) * surface[frame]->row_bytes;
-        transform_rgb_to_draw(p_row, out_row, channels, width);
+        transform_rgb_to_draw(p_row, out_row, channels, width, 0);
     }
     free(p_row);
 
@@ -312,10 +333,11 @@ int res_create_alpha_surface(const char* name, gr_surface* pSurface) {
     png_infop info_ptr = NULL;
     png_uint_32 width, height;
     png_byte channels;
+    int alpha = 0;
 
     *pSurface = NULL;
 
-    result = open_png(name, &png_ptr, &info_ptr, &width, &height, &channels);
+    result = open_png(name, &png_ptr, &info_ptr, &width, &height, &channels, &alpha);
     if (result < 0) return result;
 
     if (channels != 1) {
@@ -332,6 +354,7 @@ int res_create_alpha_surface(const char* name, gr_surface* pSurface) {
     surface->height = height;
     surface->row_bytes = width;
     surface->pixel_bytes = 1;
+    surface->alpha = 0;
 
     unsigned char* p_row;
     unsigned int y;
@@ -374,6 +397,7 @@ int res_create_localized_alpha_surface(const char* name,
     png_infop info_ptr = NULL;
     png_uint_32 width, height;
     png_byte channels;
+    int alpha = 0;
 
     *pSurface = NULL;
 
@@ -383,10 +407,11 @@ int res_create_localized_alpha_surface(const char* name,
         surface->height = 0;
         surface->row_bytes = 0;
         surface->pixel_bytes = 1;
+        surface->alpha = 0;
         goto exit;
     }
 
-    result = open_png(name, &png_ptr, &info_ptr, &width, &height, &channels);
+    result = open_png(name, &png_ptr, &info_ptr, &width, &height, &channels, &alpha);
     if (result < 0) return result;
 
     if (channels != 1) {
@@ -415,6 +440,7 @@ int res_create_localized_alpha_surface(const char* name,
             surface->height = h;
             surface->row_bytes = w;
             surface->pixel_bytes = 1;
+            surface->alpha = 0;
 
             int i;
             for (i = 0; i < h; ++i, ++y) {

@@ -30,6 +30,7 @@ typedef struct {
     int height;
     int row_bytes;
     int pixel_bytes;
+    int alpha;
     unsigned char* data;
 } GRSurface;
 
