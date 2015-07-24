@@ -13,6 +13,15 @@
 
 static int s_bootloaderEnvInited = -1;
 
+int bootloader_env_init(void)
+ {
+    int ret = bootenv_init();
+     printf("ubootenv init %s.(%d)\n",
+        (ret < 0) ? "failed" : "successful", ret);
+    return ret;
+ }
+
+
 /*
 * bootloader environment variable init
 * 0: success, <0: fail

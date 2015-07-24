@@ -35,6 +35,10 @@
 #include "ui.h"
 #include "misc/misc.h"
 
+extern "C" {
+#include "ubootenv/uboot_env.h"
+}
+
 extern RecoveryUI* ui;
 
 #define ASSUMED_UPDATE_BINARY_NAME  "META-INF/com/google/android/update-binary"
@@ -281,6 +285,10 @@ install_package(const char* path, int* wipe_cache, const char* install_file,
         result = INSTALL_ERROR;
     } else {
         result = really_install_package(path, wipe_cache, needs_mount);
+        if (result == INSTALL_SUCCESS) {
+            /* must update env list when update_binary child exit */
+            bootloader_env_init();
+        }
     }
     if (install_log) {
         fputc(result == INSTALL_SUCCESS ? '1' : '0', install_log);

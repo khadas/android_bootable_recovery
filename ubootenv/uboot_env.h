@@ -1,4 +1,10 @@
 /*
+* bootloader env init
+* 0: success, <0: fail
+*/
+extern int bootloader_env_init(void);
+
+/*
 * set bootloader environment variable
 * 0: success, <0: fail
 */
