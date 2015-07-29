@@ -720,18 +720,36 @@ Value* BlockImageUpdateFn(const char* name, State* state, int argc, Expr* argv[]
                 word = strtok_r(NULL, " ", &wordsave);
                 RangeSet* tgt = parse_range(word);
 
-                printf("  erasing %d blocks\n", tgt->size);
+                uint64_t test_range[2];
+                test_range[0] = tgt->pos[0] * (uint64_t)BLOCKSIZE;
+                test_range[1] = (tgt->pos[1] - tgt->pos[0]) * (uint64_t)BLOCKSIZE;
 
-                for (i = 0; i < tgt->count; ++i) {
-                    uint64_t range[2];
-                    // offset in bytes
-                    range[0] = tgt->pos[i*2] * (uint64_t)BLOCKSIZE;
-                    // len in bytes
-                    range[1] = (tgt->pos[i*2+1] - tgt->pos[i*2]) * (uint64_t)BLOCKSIZE;
+                if (ioctl(fd, BLKDISCARD, &test_range) < 0) {
+                    printf("  blkdiscard failed: %s\n", strerror(errno));
+                    printf("  zeroing %d blocks\n", tgt->size);
 
-                    if (ioctl(fd, BLKDISCARD, &range) < 0) {
-                        ErrorAbort(state, "    blkdiscard failed: %s\n", strerror(errno));
-                        goto done;
+                    allocate(BLOCKSIZE, &buffer, &buffer_alloc);
+                    memset(buffer, 0, BLOCKSIZE);
+                    for (i = 0; i < tgt->count; ++i) {
+                        check_lseek(fd, (off64_t)tgt->pos[i*2] * BLOCKSIZE, SEEK_SET);
+                        for (j = tgt->pos[i*2]; j < tgt->pos[i*2+1]; ++j) {
+                            writeblock(fd, buffer, BLOCKSIZE);
+                        }
+                    }
+                } else {
+                    printf("  erasing %d blocks\n", tgt->size);
+
+                    for (i = 0; i < tgt->count; ++i) {
+                        uint64_t range[2];
+                        // offset in bytes
+                        range[0] = tgt->pos[i*2] * (uint64_t)BLOCKSIZE;
+                        // len in bytes
+                        range[1] = (tgt->pos[i*2+1] - tgt->pos[i*2]) * (uint64_t)BLOCKSIZE;
+
+                        if (ioctl(fd, BLKDISCARD, &range) < 0) {
+                            ErrorAbort(state, "    blkdiscard failed: %s\n", strerror(errno));
+                            goto done;
+                        }
                     }
                 }
 
