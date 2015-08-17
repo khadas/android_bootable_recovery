@@ -36,6 +36,14 @@
 #define SECURE_CHECK \
         "/sys/class/defendkey/defendkey/secure_check"
 
+
+//eg: [0xc8100228] = 0xE0FC3184
+#define REG_ADDR      "c8100228"
+#define HEAD_INFO        "[0xc8100228] = 0x"
+#define DEBUGFS_PATH  "/debugfs"
+#define MOUNT_POINT  "/sys/kernel/debug"
+#define SECUR_REGFILE  "/sys/kernel/debug/aml_reg/paddr"
+
 #ifndef SECURITY_DEBUG
 #define secureDbg(fmt ...)
 #else
@@ -89,6 +97,48 @@ typedef struct SecureBootImgHdr {
     unsigned char reserve4Other[1024 - sizeof(normalBootImgHdr)];
     T_EncryptBootImgInfo encryptBootImgInfo;
 } *pT_SecureBootImgHdr;
+
+
+//S905 SECURE BOOT HEAD
+#define AML_SECU_BOOT_IMG_HDR_MAGIC        "AMLSECU!"
+#define AML_SECU_BOOT_IMG_HDR_MAGIC_SIZE   (8)
+#define AML_SECU_BOOT_IMG_HDR_VESRION      (0x0905)
+
+
+typedef struct __aml_enc_blk{
+        unsigned int  nOffset;
+        unsigned int  nRawLength;
+        unsigned int  nSigLength;
+        unsigned int  nAlignment;
+        unsigned int  nTotalLength;
+        unsigned char szPad[12];
+        unsigned char szSHA2IMG[32];
+        unsigned char szSHA2KeyID[32];
+}t_aml_enc_blk;
+
+typedef struct {
+
+        unsigned char magic[AML_SECU_BOOT_IMG_HDR_MAGIC_SIZE];//magic to identify whether it is a encrypted boot image
+
+        unsigned int  version;                  //ersion for this header struct
+        unsigned int  nBlkCnt;
+
+        unsigned char szTimeStamp[16];
+
+        t_aml_enc_blk   amlKernel;
+        t_aml_enc_blk   amlRamdisk;
+        t_aml_enc_blk   amlDTB;
+
+}AmlEncryptBootImgInfo, *p_AmlEncryptBootImgInfo;
+
+typedef struct _boot_img_hdr_secure_boot
+{
+    unsigned char           reserve4ImgHdr[1024];
+
+    AmlEncryptBootImgInfo   encrypteImgInfo;
+
+}*AmlSecureBootImgHeader;
+
 
 extern RecoveryUI *ui;
 
