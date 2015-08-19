@@ -43,6 +43,7 @@
 #define DEBUGFS_PATH  "/debugfs"
 #define MOUNT_POINT  "/sys/kernel/debug"
 #define SECUR_REGFILE  "/sys/kernel/debug/aml_reg/paddr"
+#define SECUR_DUMP  "/sys/kernel/debug/aml_reg/dump"
 
 #ifndef SECURITY_DEBUG
 #define secureDbg(fmt ...)

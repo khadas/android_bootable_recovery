@@ -139,7 +139,6 @@ static int IsGxbabyBootloaderImageEncrypted(
     const int bootloaderEncryptInfoOffset = 0x10;
     const int bootloaderEncryptInfoOffset1 = 0x70;
     const unsigned char unencryptedBootloaderInfoBuf[] = { 0x40, 0x41, 0x4D, 0x4C};
-    const unsigned char encryptedBootloaderInfoBuf[] = { 0xC9, 0x6C, 0x45, 0xC4};
 
     if (strcmp(imageName, BOOTLOADER_IMG)) {
         printf("this image must be %s,but it is %s\n",
@@ -158,11 +157,8 @@ static int IsGxbabyBootloaderImageEncrypted(
     if (!memcmp(unencryptedBootloaderInfoBuf, pEncryptedBootloaderInfoBufAddr,
         ARRAY_SIZE(unencryptedBootloaderInfoBuf))) {
         step0 = 0;   // unencrypted
-    }else if (!memcmp(encryptedBootloaderInfoBuf, pEncryptedBootloaderInfoBufAddr,
-        ARRAY_SIZE(encryptedBootloaderInfoBuf))) {
-        step0 = 1;   // encrypted
     }else {
-        return -1;       //error
+        step0 = 1;   // encrypted
     }
 
     pstart = pImageAddr + bootloaderEncryptInfoOffset1;
@@ -370,24 +366,21 @@ static int IsGxbabyPlatformEncrypted(void)
     int len = 0;
     int ret = 0;
     int dev_fd = 0;
+    int dump_fd = 0;
     int secure_flag = 0;
     char *ptmp = NULL;
     char buffer[128] = {0};
-    int offset = strlen(HEAD_INFO);
+    int offset = strlen(HEAD_INFO)+2;
 
     scan_mounted_volumes();
     const MountedVolume* vol = find_mounted_volume_by_mount_point(MOUNT_POINT);
-    if (vol != NULL) {
-        printf("%s have mounted,  now umount!\n", MOUNT_POINT);
-        umount(MOUNT_POINT);
+    if (vol == NULL) {
+        ret = mount(DEBUGFS_PATH, MOUNT_POINT,"debugfs", MS_MGC_VAL, NULL);
+        if (ret < 0) {
+            printf("mount %s failed! ret = %d\n", DEBUGFS_PATH, ret);
+            return -1;
+        }
     }
-
-    ret = mount(DEBUGFS_PATH, MOUNT_POINT,"debugfs", MS_MGC_VAL, NULL);
-    if (ret == -1) {
-        printf("mount %s failed! ret = %d\n", DEBUGFS_PATH, ret);
-        return -1;
-    }
-
 
     dev_fd = open(SECUR_REGFILE, O_RDWR);
     if (dev_fd < 0) {
@@ -405,8 +398,17 @@ static int IsGxbabyPlatformEncrypted(void)
         return -1;
     }
 
+    dump_fd = open(SECUR_DUMP, O_RDWR);
+    if (dump_fd < 0) {
+        printf("open dump failed!\n");
+        close(dev_fd);
+        umount(MOUNT_POINT);
+        return -1;
+    }
+
+    len = write(dump_fd, REG_ADDR, sizeof(REG_ADDR));
+
     len = read(dev_fd, buffer, 128 );
-    printf("real read len = %d!\n", len);
 
     ptmp = buffer + offset;
     secure_flag = (strtol(ptmp, NULL, 16) & (1U<<4));
@@ -420,6 +422,7 @@ static int IsGxbabyPlatformEncrypted(void)
     }
 
     close(dev_fd);
+    close(dump_fd);
     umount(MOUNT_POINT);
     return ret;
 
