@@ -239,6 +239,7 @@ minui_backend *open_adf()
         return NULL;
     }
 
+    pdata->intf_fd = -1;
     pdata->base.init = adf_init;
     pdata->base.flip = adf_flip;
     pdata->base.blank = adf_blank;

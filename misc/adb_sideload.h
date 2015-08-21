@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2012 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef _MISC_H_
-#define _MISC_H_
+#ifndef _ADB_LISTENER_H
+#define _ADB_LISTENER_H
 
-// Api for recovery write key
-int RecoveryWriteKey(const char *keyOptarg);
+#define ADB_SIDELOAD    	"/tmp/adb_sideload"
+#define ADB_SIDELOAD_OK 	"/tmp/adb_sideload_ok"
+#define ADB_SIDELOAD_FAIL       "/tmp/adb_sideload_fail"
+#define TEMPORARY_INSTALL_FILE  "/tmp/last_install"
 
-// Api for recovery secure check
-int RecoverySecureCheck(const char *zipPath);
+extern void adb_copy_logs(void);
+extern int adb_erase_volume(const char *volume);
 
-// Api for recovery adb sideload
-void adb_listeners(RecoveryUI* ui, int argc, char **argv);
-
-#endif  /* _MISC_H_ */
+#endif /* _ADB_LISTENER_H */

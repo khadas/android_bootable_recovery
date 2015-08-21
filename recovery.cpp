@@ -1227,6 +1227,16 @@ ui_print(const char* format, ...) {
     }
 }
 
+void
+adb_copy_logs(void) {
+    copy_logs();
+}
+
+int
+adb_erase_volume(const char *volume) {
+    return erase_volume(volume);
+}
+
 int
 main(int argc, char **argv) {
     time_t start = time(NULL);
@@ -1435,6 +1445,10 @@ main(int argc, char **argv) {
         status = INSTALL_SUCCESS;
         ui->ShowText(false);
     }
+
+#ifndef RECOVERY_DISABLE_ADB_SIDELOAD
+    adb_listeners(ui, argc, argv);
+#endif
 
     Device::BuiltinAction after = shutdown_after ? Device::SHUTDOWN : Device::REBOOT;
     if (just_exit) {

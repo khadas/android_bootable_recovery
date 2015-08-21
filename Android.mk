@@ -41,7 +41,8 @@ LOCAL_SRC_FILES := \
     adb_install.cpp \
     fuse_sdcard_provider.c \
     misc/key.cpp \
-    misc/security.cpp
+    misc/security.cpp \
+    misc/adb_sideload.cpp
 
 LOCAL_MODULE := recovery
 
@@ -93,6 +94,10 @@ ifeq ($(TARGET_RECOVERY_UI_LIB),)
   LOCAL_SRC_FILES += default_device.cpp
 else
   LOCAL_STATIC_LIBRARIES += $(TARGET_RECOVERY_UI_LIB)
+endif
+
+ifeq ($(TARGET_RECOVERY_DISABLE_ADB_SIDELOAD), true)
+  LOCAL_CFLAGS += -DRECOVERY_DISABLE_ADB_SIDELOAD
 endif
 
 LOCAL_C_INCLUDES += system/extras/ext4_utils
