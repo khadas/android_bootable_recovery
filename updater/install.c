@@ -1251,6 +1251,76 @@ err:
     return -1;
 }
 
+
+
+//return value
+//  0   Ignore
+//  1   Update
+//  -1  failed
+int uboot_sha_check(Value* contents, int fd, int flag)
+{
+    int ret = -1;
+    int read_len = 0;
+    int file_len = contents->size;
+    uint8_t shaboard[SHA_DIGEST_SIZE];
+    uint8_t shaotapackage[SHA_DIGEST_SIZE];
+
+    if (contents == NULL) {
+        printf("param contents is NULL\n");
+        return -1;
+    }
+
+    char* buffer = malloc(file_len);
+    if (buffer == NULL) {
+        fprintf(stderr, "can't malloc,line%d:.%s\n", __LINE__, strerror(errno));
+        return -1;
+    }
+
+    read_len = read(fd, buffer, file_len);
+    if (read_len != file_len) {
+        printf("read board uboot failed, read_len:%d, file_len:%d\n", read_len, file_len);
+        free(buffer);
+        return -1;
+    }
+
+    SHA_hash(buffer, file_len, shaboard);
+    lseek(fd, 0, SEEK_SET);
+
+    memset(buffer, 0x00, file_len);
+
+
+    if ((flag == 1) && (contents->type == VAL_STRING)) {
+        char* filename = contents->data;
+        FILE* f = fopen(filename, "rb");
+        if (f == NULL) {
+            fprintf(stderr, "can't open %s: %s\n",  filename, strerror(errno));
+            free(buffer);
+            return -1;
+        }
+
+        read_len = fread(buffer, 1, file_len, f);
+        if (read_len != file_len) {
+            printf("read package uboot failed, read_len:%d, file_len:%d\n", read_len, file_len);
+            free(buffer);
+            fclose(f);
+            return -1;
+        }
+
+        SHA_hash(buffer, file_len, shaotapackage);
+        fclose(f);
+     }  else {
+         SHA_hash(contents->data, contents->size,shaotapackage);
+    }
+
+    free(buffer);
+    if (memcmp(shaboard, shaotapackage, SHA_DIGEST_SIZE) == 0) {
+        return  0; //package and board image is the same
+    } else {
+        return  1;
+    }
+}
+
+
 //Ignore mbr since mmc driver already handled
 //#define MMC_UBOOT_CLEAR_MBR
 
@@ -1258,6 +1328,7 @@ char *block_write_data( Value* contents, char * name)
 {
     char devname[64] = {0};
     int fd = -1;
+    int check = 0;
     char * tmp_name = NULL;
     char *result = NULL;
     bool success = false;
@@ -1291,6 +1362,13 @@ char *block_write_data( Value* contents, char * name)
             contents->data[511] = 0;
             printf("modify the 55 AA info for emmc uboot\n");
 #endif
+
+            check = uboot_sha_check(contents, fd, 1);
+            if (check == 0) {
+                printf("no need to upate %s!\n", devname);
+                result = name;
+                goto done;
+            }
 
             if (contents->type == VAL_STRING) {
                 printf("%s contents type: VAL_STRING\n", name);
@@ -1329,6 +1407,14 @@ char *block_write_data( Value* contents, char * name)
             }
         } else {
             printf("start to write %s to %s...\n", name, devname);
+
+            check = uboot_sha_check(contents, fd, 0);
+            if (check == 0) {
+                printf("no need to upate %s!\n", devname);
+                result = name;
+                goto done;
+            }
+
             success = true;
             size_t len =  contents->size;
             fprintf(stderr, "data len = %d\n", len);
