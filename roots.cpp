@@ -387,10 +387,10 @@ int ensure_path_mounted(const char* path) {
                     MS_NOATIME | MS_NODEV | MS_NODIRATIME | MS_RDONLY, "")) {
                     return 0;
                 }
-            } else {
-                if (!mount(v->blk_device, v->mount_point, v->fs_type,
-                    MS_NOATIME | MS_NODEV | MS_NODIRATIME, "")) {
-                    return 0;
+           } else {
+                 if (!mount(v->blk_device, v->mount_point, v->fs_type,
+                     MS_NOATIME | MS_NODEV | MS_NODIRATIME, "discard")) {
+                     return 0;
                 }
             }
 

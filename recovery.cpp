@@ -59,6 +59,7 @@ static const struct option OPTIONS[] = {
   { "update_package", required_argument, NULL, 'u' },
   { "update_patch", required_argument, NULL, 'e' },
   { "wipe_data", no_argument, NULL, 'w' },
+  { "wipe_data_condition", no_argument, NULL, 'h' },
   { "wipe_cache", no_argument, NULL, 'c' },
   { "show_text", no_argument, NULL, 't' },
   { "force_stop", no_argument, NULL, 'f' },
@@ -102,6 +103,10 @@ char* locale = NULL;
 char recovery_version[PROPERTY_VALUE_MAX+1];
 char* stage = NULL;
 char* reason = NULL;
+
+#define  SAVE_MAX    (16)
+
+char g_save_name[SAVE_MAX][PATH_MAX] = {0};
 
 /*
  * The recovery tool communicates with the main system through /cache files.
@@ -357,9 +362,14 @@ factory_reset_poweroff_protect(int *argc, char ***argv) {
     const char *param = NULL;
     const char *wipe_data = get_bootloader_env("wipe_data");
     const char *wipe_cache = get_bootloader_env("wipe_cache");
+    const char *data_condition = get_bootloader_env("data_condition");
 
     if ((wipe_data != NULL) && !strcmp(wipe_data, "failed")) {
-        param = "--wipe_data";
+        if ((data_condition != NULL) && !strcmp(data_condition, "failed")) {
+            param = "--wipe_data_condition";
+        } else {
+            param = "--wipe_data";
+        }
     } else if((wipe_cache != NULL) && !strcmp(wipe_cache, "failed")) {
         param = "--wipe_cache";
     }
@@ -389,21 +399,27 @@ static void
 factory_reset_poweroff_env_set(
     const char *volume, const int flag) {
     if (volume == NULL ||
-        (strcmp(volume, "/data") && strcmp(volume, "/cache"))) {
+        (strcmp(volume, "/data") && strcmp(volume, "/cache")&&strcmp(volume, "/data_condition"))) {
         return;
     }
-
     const char *env_name = NULL;
     const char *env_val = flag ? "successful" : "failed";
-    if (!strcmp(volume, "/data")) {
-        env_name = "wipe_data";
-    } else {
+    if (!strcmp(volume, "/cache")) {
         env_name = "wipe_cache";
+    } else {
+        env_name = "wipe_data";
     }
 
     int ret = set_bootloader_env(env_name, env_val);
     printf("setenv %s=%s %s.(%d)\n", env_name, env_val,
         (ret < 0) ? "failed" : "successful", ret);
+
+    if (!strcmp(volume, "/data_condition")) {
+        env_name = "data_condition";
+        ret = set_bootloader_env(env_name, env_val);
+        printf("setenv %s=%s %s.(%d)\n", env_name, env_val,
+            (ret < 0) ? "failed" : "successful", ret);
+    }
 }
 
 static void
@@ -556,6 +572,77 @@ finish_recovery(const char *send_intent) {
     sync();  // For good measure.
 }
 
+static unsigned char *
+remove_unshow_char(unsigned char *s) {
+    unsigned char *s1=s;
+    unsigned char *s2=s;
+
+    while (*s1) {
+        if (*s1 > 0x20) {
+            *s2 = *s1;
+            s2++;
+        }
+        s1++;
+    }
+    *s2 = 0;
+    return s;
+}
+
+static int
+check_name(const char *pname, int num) {
+    int i = 0;
+    int ret = -1;
+
+    for (i=0; i<num; i++) {
+        if (strcmp(pname, g_save_name[i]) == 0) {
+            ret = 0;
+            break;
+        }
+    }
+
+    return ret;
+}
+
+
+static int
+get_erase_conf_list(int *num, const char *path) {
+    FILE *fp = NULL;
+    int filenum = 0;
+    char buf[128+1];
+    char *str = NULL;
+    char *key = NULL;
+    char *value_s = NULL;
+
+    fp = fopen(path, "r");
+    if (fp == NULL) {
+        return -1;
+    }
+
+    while (fgets(buf,128, fp)) {
+        if (strstr(buf, "#") != NULL) {
+            continue;
+        }
+
+        str = (char *)remove_unshow_char((unsigned char *)buf);
+        key = strtok(str, "=");
+        if ( key && (value_s=strtok(NULL, "="))) {
+            int value=atoi(value_s);
+            if (value == 1) {
+                printf("need save dir:%s\n",key);
+                memcpy(g_save_name[filenum], key, strlen(key));
+                filenum++;
+                if (filenum == SAVE_MAX) {
+                    break;
+                }
+            }
+        }
+    }
+
+     *num = filenum;
+    fclose(fp);
+    return 0;
+}
+
 typedef struct _saved_log_file {
     char* name;
     struct stat st;
@@ -647,6 +734,108 @@ erase_volume(const char *volume) {
 
     factory_reset_poweroff_env_set(volume, 1);
 
+    return result;
+}
+
+
+static int
+dirUnlinkCondition(const char *s_path, int num)
+{
+    int flag = 0;
+    int result = 0;
+    char tmp_path[PATH_MAX] ={0};
+    DIR *dir_s = NULL;
+    struct stat st;
+    struct dirent *sp = NULL;
+
+    dir_s = opendir(s_path);
+    if (dir_s == NULL)
+    {
+        printf("This directory don't exist !s_path:%s\n", s_path);
+        return -1;
+    }
+
+    strcpy(tmp_path,s_path);
+
+    while ((sp=readdir(dir_s)) != NULL) {
+        if ((strcmp(sp->d_name,".") != 0) && (strcmp(sp->d_name,"..") != 0)) {
+             strcat(tmp_path,"/");
+             strcat(tmp_path,sp->d_name);
+
+            /* is it a file or directory? */
+            if (lstat(tmp_path, &st) < 0) {
+                return -1;
+            }
+
+            /* a file, so unlink it */
+            if (!S_ISDIR(st.st_mode)) {
+                result = check_name(tmp_path, num);
+                if (result != 0) {
+                    printf("rm file %s\n", tmp_path);
+                    unlink(tmp_path);
+                } else {
+                    flag=1;
+                }
+                strcpy(tmp_path,s_path);
+                continue;
+            }
+
+            result = check_name(tmp_path, num);
+            if (result == 0) {
+                flag=1;
+                strcpy(tmp_path,s_path);
+                continue;
+            }
+
+            result = dirUnlinkCondition(tmp_path, num);
+            if (result != 0) {
+                closedir(dir_s);
+                return -1;
+            }
+
+            strcpy(tmp_path,s_path);
+        }
+    }
+
+    if (closedir(dir_s) < 0) {
+        return -1;
+    }
+
+    if (flag != 1) {
+        printf("rm dir %s\n", tmp_path);
+        rmdir(s_path);
+    }
+
+    return 0;
+}
+
+
+
+static int
+erase_data_condition(const char *s_path) {
+    int num = 0;
+    int result = 0;
+
+    if (!s_path) {
+        printf("ERR:the %s for erase is NULL! \n", s_path);
+        return -1;
+    }
+
+    result = get_erase_conf_list(&num, "/res/wipe_data.cfg");
+    if (result != 0) {
+        ui->Print("get erase config file failed!\n");
+    }
+
+    factory_reset_poweroff_env_set("/data_condition", 0);
+
+    ui->Print("Formatting %s...\n", s_path);
+    ensure_path_mounted(s_path);
+
+    result = dirUnlinkCondition(s_path, num);
+
+    ensure_path_unmounted(s_path);
+
+    factory_reset_poweroff_env_set("/data_condition", 1);
     return result;
 }
 
@@ -1265,7 +1454,7 @@ main(int argc, char **argv) {
     const char *send_intent = NULL;
     const char *update_package = NULL;
     const char *update_patch = NULL;
-    int wipe_data = 0, wipe_cache = 0, show_text = 0;
+    int wipe_data = 0, wipe_data_condition = 0,wipe_cache = 0, show_text = 0;
     bool force_stop = false;
     bool just_exit = false;
     bool shutdown_after = false;
@@ -1279,6 +1468,7 @@ main(int argc, char **argv) {
         case 'u': update_package = optarg; break;
         case 'e': update_patch = optarg; break;
         case 'w': wipe_data = wipe_cache = 1; break;
+        case 'h': wipe_data_condition = wipe_cache = 1; break;
         case 'c': wipe_cache = 1; break;
         case 't': show_text = 1; break;
         case 'f': force_stop = true; break;
@@ -1410,6 +1600,12 @@ main(int argc, char **argv) {
         instaboot_clear();
         if (device->WipeData()) status = INSTALL_ERROR;
         if (erase_volume("/data")) status = INSTALL_ERROR;
+        if (wipe_cache && erase_volume("/cache")) status = INSTALL_ERROR;
+        if (status != INSTALL_SUCCESS) ui->Print("Data wipe failed.\n");
+     } else if (wipe_data_condition) {
+        instaboot_clear();
+        if (device->WipeData()) status = INSTALL_ERROR;
+        if (erase_data_condition("/data")) status = INSTALL_ERROR;
         if (wipe_cache && erase_volume("/cache")) status = INSTALL_ERROR;
         if (status != INSTALL_SUCCESS) ui->Print("Data wipe failed.\n");
     } else if (wipe_cache) {
