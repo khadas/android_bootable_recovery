@@ -50,9 +50,7 @@
 #include "adb_install.h"
 #include "adb_sideload.h"
 
-extern "C" {
-#include "minadbd/adb.h"
-}
+#include "adb.h"
 
 static RecoveryUI* ui = NULL;
 
@@ -102,7 +100,7 @@ adb_sideload(void) {
         exec_cmd("/sbin/busybox", argvs2);
     }
 
-    int wipe_cache;
+    bool wipe_cache;
     status = apply_from_adb(ui, &wipe_cache, TEMPORARY_INSTALL_FILE);
     if (status >= 0) {
         if (status != INSTALL_SUCCESS) {

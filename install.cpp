@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -52,7 +53,7 @@ static const float DEFAULT_IMAGE_PROGRESS_FRACTION = 0.1;
 
 // If the package contains an update binary, extract it and run it.
 static int
-try_update_binary(const char *path, ZipArchive *zip, int* wipe_cache) {
+try_update_binary(const char* path, ZipArchive* zip, bool* wipe_cache) {
     const ZipEntry* binary_entry =
             mzFindZipEntry(zip, ASSUMED_UPDATE_BINARY_NAME);
     if (binary_entry == NULL) {
@@ -92,7 +93,7 @@ try_update_binary(const char *path, ZipArchive *zip, int* wipe_cache) {
     //            fill up the next <frac> part of of the progress bar
     //            over <secs> seconds.  If <secs> is zero, use
     //            set_progress commands to manually control the
-    //            progress of this segment of the bar
+    //            progress of this segment of the bar.
     //
     //        set_progress <frac>
     //            <frac> should be between 0.0 and 1.0; sets the
@@ -110,6 +111,18 @@ try_update_binary(const char *path, ZipArchive *zip, int* wipe_cache) {
     //
     //        ui_print <string>
     //            display <string> on the screen.
+    //
+    //        wipe_cache
+    //            a wipe of cache will be performed following a successful
+    //            installation.
+    //
+    //        clear_display
+    //            turn off the text display.
+    //
+    //        enable_reboot
+    //            packages can explicitly request that they want the user
+    //            to be able to reboot during installation (useful for
+    //            debugging packages that don't exit).
     //
     //   - the name of the package zip file.
     //
@@ -134,7 +147,7 @@ try_update_binary(const char *path, ZipArchive *zip, int* wipe_cache) {
     close(pipefd[1]);
 
     //don`t overlay the value from recovery command file
-    //*wipe_cache = 0;
+    //*wipe_cache = false;
 
     char buffer[1024];
     FILE* from_child = fdopen(pipefd[0], "r");
@@ -163,7 +176,7 @@ try_update_binary(const char *path, ZipArchive *zip, int* wipe_cache) {
             }
             fflush(stdout);
         } else if (strcmp(command, "wipe_cache") == 0) {
-            *wipe_cache = 1;
+            *wipe_cache = true;
         } else if (strcmp(command, "clear_display") == 0) {
             ui->SetBackground(RecoveryUI::NONE);
         } else if (strcmp(command, "enable_reboot") == 0) {
@@ -188,7 +201,7 @@ try_update_binary(const char *path, ZipArchive *zip, int* wipe_cache) {
 }
 
 static int
-really_install_package(const char *path, int* wipe_cache, bool needs_mount)
+really_install_package(const char *path, bool* wipe_cache, bool needs_mount)
 {
     ui->SetBackground(RecoveryUI::INSTALLING_UPDATE);
     ui->Print("Finding update package...\n");
@@ -269,9 +282,11 @@ really_install_package(const char *path, int* wipe_cache, bool needs_mount)
 }
 
 int
-install_package(const char* path, int* wipe_cache, const char* install_file,
+install_package(const char* path, bool* wipe_cache, const char* install_file,
                 bool needs_mount)
 {
+    modified_flash = true;
+
     FILE* install_log = fopen_path(install_file, "w");
     if (install_log) {
         fputs(path, install_log);

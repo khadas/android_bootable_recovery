@@ -594,7 +594,7 @@ Value* PackageExtractDirFn(const char* name, State* state,
     }
 
     bool success = mzExtractRecursive(za, zip_path, dest_path,
-                                      MZ_EXTRACT_FILES_ONLY, &timestamp,
+                                      &timestamp,
                                       NULL, NULL, sehandle);
     free(zip_path);
     free(dest_path);

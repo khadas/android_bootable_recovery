@@ -35,7 +35,7 @@
 
 int main() {
     gr_init();
-    gr_surface ts;
+    GRSurface *ts;
     int result = res_create_display_surface("test", &ts);
     if (result < 0) {
         printf("create surface fail %d\n", result);

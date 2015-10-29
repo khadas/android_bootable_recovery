@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -33,8 +34,8 @@
 #include "minui.h"
 #include "graphics.h"
 
-static gr_surface fbdev_init(minui_backend*);
-static gr_surface fbdev_flip(minui_backend*);
+static GRSurface* fbdev_init(minui_backend*);
+static GRSurface* fbdev_flip(minui_backend*);
 static void fbdev_blank(minui_backend*, bool);
 static void fbdev_exit(minui_backend*);
 
@@ -44,7 +45,7 @@ static GRSurface* gr_draw = NULL;
 static GRSurface temp_buffer[1];
 static int displayed_buffer;
 
-static struct fb_var_screeninfo vi;
+static fb_var_screeninfo vi;
 static int fb_fd = -1;
 
 static minui_backend my_backend = {
@@ -80,18 +81,14 @@ static void set_displayed_framebuffer(unsigned n)
     displayed_buffer = n;
 }
 
-static gr_surface fbdev_init(minui_backend* backend) {
-    int fd;
-    void *bits;
-
-    struct fb_fix_screeninfo fi;
-
-    fd = open("/dev/graphics/fb0", O_RDWR);
-    if (fd < 0) {
+static GRSurface* fbdev_init(minui_backend* backend) {
+    int fd = open("/dev/graphics/fb0", O_RDWR);
+    if (fd == -1) {
         perror("cannot open fb0");
         return NULL;
     }
 
+    fb_fix_screeninfo fi;
     if (ioctl(fd, FBIOGET_FSCREENINFO, &fi) < 0) {
         perror("failed to get fb0 info");
         close(fd);
@@ -148,7 +145,7 @@ static gr_surface fbdev_init(minui_backend* backend) {
            vi.green.offset, vi.green.length,
            vi.blue.offset, vi.blue.length);
 
-    bits = mmap(0, fi.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    void* bits = mmap(0, fi.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (bits == MAP_FAILED) {
         perror("failed to mmap framebuffer");
         close(fd);
@@ -166,9 +163,8 @@ static gr_surface fbdev_init(minui_backend* backend) {
 #endif
     gr_framebuffer[0].row_bytes = fi.line_length;
     gr_framebuffer[0].pixel_bytes = vi.bits_per_pixel / 8;
-    gr_framebuffer[0].data = bits;
-
-    memset(gr_framebuffer[0].data, 0, vi.yres * gr_framebuffer[0].row_bytes);
+    gr_framebuffer[0].data = reinterpret_cast<uint8_t*>(bits);
+    memset(gr_framebuffer[0].data, 0, gr_framebuffer[0].height * gr_framebuffer[0].row_bytes);
 
     /* check if we can use double buffering */
     if (vi.yres * fi.line_length * 2 <= fi.smem_len) {
@@ -222,7 +218,7 @@ static gr_surface fbdev_init(minui_backend* backend) {
     return gr_draw;
 }
 
-static gr_surface fbdev_flip(minui_backend* backend __unused) {
+static GRSurface* fbdev_flip(minui_backend* backend __unused) {
     if (double_buffered) {
 #if defined(RECOVERY_ROTATE_90)
         unsigned int i = 0,  j = 0;

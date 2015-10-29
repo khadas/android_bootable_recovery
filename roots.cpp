@@ -39,7 +39,6 @@ static struct fstab *fstab = NULL;
 
 extern struct selabel_handle *sehandle;
 
-static const char* PERSISTENT_PATH = "/persistent";
 
 #define NUM_OF_BLKDEVICE_TO_ENUM    3
 #define NUM_OF_PARTITION_TO_ENUM    6
@@ -365,12 +364,23 @@ int ensure_path_mounted(const char* path) {
             return -1;
         }
         return mtd_mount_partition(partition, v->mount_point, v->fs_type, 0);
-    } else if (strcmp(v->fs_type, "ext4") == 0 ||
-        strcmp(v->fs_type, "vfat") == 0 ||
-        strcmp(v->fs_type, "auto") == 0 ||
-        strcmp(v->fs_type, "f2fs") == 0) {
-        if ((strcmp(v->fs_type, "vfat") == 0 || strstr(v->fs_type, "auto")) &&
-            (strstr(v->mount_point, "sdcard") || strstr(v->mount_point, "udisk"))) {
+    } else if (strcmp(v->fs_type, "ext4") == 0) {
+        if (strstr(v->mount_point, "system")) {
+            if (!mount(v->blk_device, v->mount_point, v->fs_type,
+                 MS_NOATIME | MS_NODEV | MS_NODIRATIME | MS_RDONLY, "")) {
+                 return 0;
+            }
+        } else {
+            if (!mount(v->blk_device, v->mount_point, v->fs_type,
+                 MS_NOATIME | MS_NODEV | MS_NODIRATIME, "discard")) {
+                 return 0;
+            }
+        }
+        LOGE("failed to mount %s (%s)\n", v->mount_point, strerror(errno));
+        return -1;
+    } else if (strcmp(v->fs_type, "vfat") == 0 ||
+               strcmp(v->fs_type, "auto") == 0 ) {
+        if (strstr(v->mount_point, "sdcard") || strstr(v->mount_point, "udisk")){
             int time_out = 400000;
             while (time_out) {
                 if (!smart_device_mounted(v)) {
@@ -379,24 +389,21 @@ int ensure_path_mounted(const char* path) {
                 usleep(100000);
                 time_out -= 100000;
             }
-            LOGE("failed to mount %s (%s)\n", v->mount_point, strerror(errno));
-            return -1;
         } else {
-            if (strstr(v->mount_point, "system")) {
-                if (!mount(v->blk_device, v->mount_point, v->fs_type,
-                    MS_NOATIME | MS_NODEV | MS_NODIRATIME | MS_RDONLY, "")) {
-                    return 0;
-                }
-           } else {
-                 if (!mount(v->blk_device, v->mount_point, v->fs_type,
-                     MS_NOATIME | MS_NODEV | MS_NODIRATIME, "discard")) {
-                     return 0;
-                }
+            if (!mount(v->blk_device, v->mount_point, v->fs_type,
+                MS_NOATIME | MS_NODEV | MS_NODIRATIME | MS_RDONLY, "")) {
+                return 0;
             }
-
-            LOGE("failed to mount %s (%s)\n", v->mount_point, strerror(errno));
-            return -1;
         }
+        LOGE("failed to mount %s (%s)\n", v->mount_point, strerror(errno));
+        return -1;
+    } else if (strcmp(v->fs_type, "squashfs") == 0 ||
+               strcmp(v->fs_type, "f2fs") == 0) {
+        result = mount(v->blk_device, v->mount_point, v->fs_type,
+                       v->flags, v->fs_options);
+        if (result == 0) return 0;
+        LOGE("failed to mount %s (%s)\n", v->mount_point, strerror(errno));
+        return -1;
     }
 
     LOGE("unknown fs_type \"%s\" for %s\n", v->fs_type, v->mount_point);

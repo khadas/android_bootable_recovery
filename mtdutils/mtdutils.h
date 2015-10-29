@@ -55,7 +55,6 @@ int ext4_erase_volum(const char *volume);
 MtdWriteContext *mtd_write_partition(const MtdPartition *);
 ssize_t mtd_write_data(MtdWriteContext *, const char *data, size_t data_len);
 off_t mtd_erase_blocks(MtdWriteContext *, int blocks);  /* 0 ok, -1 for all */
-off_t mtd_find_write_start(MtdWriteContext *ctx, off_t pos);
 int mtd_write_close(MtdWriteContext *);
 
 #ifdef __cplusplus

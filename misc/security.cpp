@@ -15,7 +15,7 @@
 #include "ui.h"
 #include "security.h"
 #include "mtdutils/mounts.h"
-
+#include "string.h"
 
 static bool isGxbaby = 0;
 
