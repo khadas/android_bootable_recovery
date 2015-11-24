@@ -24,6 +24,11 @@
 // Abstract class for controlling the user interface during recovery.
 class RecoveryUI {
   public:
+    struct KeyMapItem_t {
+        const char* type;
+        int value;
+        int key[6];
+    };
     RecoveryUI();
 
     virtual ~RecoveryUI() { }
@@ -145,12 +150,6 @@ private:
         RecoveryUI* ui;
         int key_code;
         int count;
-    };
-
-    struct KeyMapItem_t {
-        const char* type;
-        int value;
-        int key[6];
     };
 
     int num_keys;

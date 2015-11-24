@@ -40,6 +40,13 @@
 
 #define UI_WAIT_KEY_TIMEOUT_SEC    120
 
+static RecoveryUI::KeyMapItem_t g_presupposed_keymap[] = {
+    { "select", Device::kInvokeItem, {BTN_MOUSE, BTN_LEFT, -1, -1, -1, -1} }
+};
+
+#define NUM_PRESUPPOSED_KEY_MAP (sizeof(g_presupposed_keymap) / sizeof(g_presupposed_keymap[0]))
+
+
 RecoveryUI::RecoveryUI()
         : key_queue_len(0),
           key_last_down(-1),
@@ -308,6 +315,14 @@ int RecoveryUI::getMapKey(int key) {
                 return v->value;
         }
     }
+
+    for (i = 0; i < (int)NUM_PRESUPPOSED_KEY_MAP; i++) {
+        for (j = 0; j < 6; j++) {
+            if (g_presupposed_keymap[i].key[j] == key)
+                return g_presupposed_keymap[i].value;
+        }
+    }
+
     return -1;
 }
 
