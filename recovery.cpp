@@ -1007,11 +1007,6 @@ static char* browse_directory(const char* path, Device* device) {
     return result;
 }
 
-//static void
-//wipe_data_with_headers(int confirm, Device* device, const char* headers[]) {
-//    wipe_data( confirm, device, headers);
-//}
-
 static void file_to_ui(const char* fn) {
     FILE *fp = fopen_path(fn, "re");
     if (fp == NULL) {
@@ -1037,8 +1032,37 @@ static bool wipe_data(int should_confirm, Device* device) {
     modified_flash = true;
 
     ui->Print("\n-- Wiping data...\n");
-	instaboot_clear();
-	
+    instaboot_clear();
+
+    bool success =
+        device->PreWipeData() &&
+        erase_volume("/data") &&
+        erase_volume("/cache") &&
+        device->PostWipeData();
+    ui->Print("Data wipe %s.\n", success ? "complete" : "failed");
+    return success;
+}
+
+// Return true on success.
+static bool wipe_data_with_headers(
+    int should_confirm, Device* device, const char* title[]) {
+    char** headers = NULL;
+    if (should_confirm) {
+        const char* items[] = { " No", " Yes", NULL };
+        const char* default_headers[] = {
+            "Wipe all user data?", "  THIS CAN NOT BE UNDONE!", NULL };
+        headers = (title != NULL) ? (char **)title : (char **)default_headers;
+        int chosen_item = get_menu_selection(headers, items, 1, 0, device);
+        if (chosen_item != 1) {
+            return false;
+        }
+    }
+
+    modified_flash = true;
+
+    ui->Print("\n-- Wiping data...\n");
+    instaboot_clear();
+
     bool success =
         device->PreWipeData() &&
         erase_volume("/data") &&
@@ -1635,12 +1659,12 @@ main(int argc, char **argv) {
         printf("data_ro_wipe tip\n");
         ui->ShowText(true);
         const char* headers[] = {
-                    "Boot failed because data read-only,partition maybe damaged.",
+                    "Data partition is read-only,maybe damaged.",
                     "Do you want to wipe data?",
                     "  THIS CAN NOT BE UNDONE.",
                     "",
                     NULL };
-        //wipe_data_with_headers(1, device, headers);
+        wipe_data_with_headers(1, device, headers);
         status = INSTALL_SUCCESS;
         ui->ShowText(false);
     }
