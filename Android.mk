@@ -42,7 +42,6 @@ LOCAL_SRC_FILES := \
     ui.cpp \
     verifier.cpp \
     misc/key.cpp \
-    misc/security.cpp \
     misc/adb_sideload.cpp
 
 LOCAL_MODULE := recovery
@@ -143,7 +142,9 @@ include $(LOCAL_PATH)/minui/Android.mk \
     $(LOCAL_PATH)/tests/Android.mk \
     $(LOCAL_PATH)/tools/Android.mk \
     $(LOCAL_PATH)/edify/Android.mk \
+    $(LOCAL_PATH)/check/Android.mk \
     $(LOCAL_PATH)/uncrypt/Android.mk \
     $(LOCAL_PATH)/updater/Android.mk \
     $(LOCAL_PATH)/ubootenv/Android.mk \
+    $(LOCAL_PATH)/fdt/Android.mk \
     $(LOCAL_PATH)/applypatch/Android.mk

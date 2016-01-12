@@ -12,13 +12,11 @@
 #include "minzip/SysUtil.h"
 #include "minzip/Zip.h"
 #include "cutils/properties.h"
-#include "ui.h"
+//#include "ui.h"
 #include "security.h"
 #include "mtdutils/mounts.h"
-#include "string.h"
 
-static bool isGxbaby = 0;
-
+T_KernelVersion kernel_ver = KernelV_3_10;
 /**
   *  --- judge platform whether match with zip image or not
   *
@@ -77,12 +75,6 @@ static int IsPlatformMachWithZipArchiveImage(
             if (!imageEncryptStatus) {
                 ret = 0;
             } else {
-
-                if (isGxbaby)
-                {
-                    ret = 1;
-                    break;
-                }
                 fd = open(DEFEND_KEY, O_RDWR);
                 if (fd <= 0) {
                     printf("open %s failed (%s)\n",
@@ -122,7 +114,7 @@ static int IsPlatformMachWithZipArchiveImage(
   *  =0: unencrypted
   *  >0: encrypted
   */
-static int IsGxbabyBootloaderImageEncrypted(
+static int IsBootloaderImageEncrypted(
         const char *imageName,
         const unsigned char *imageBuffer)
 {
@@ -131,14 +123,18 @@ static int IsGxbabyBootloaderImageEncrypted(
     int index=0;
     unsigned char result= 0;
     const unsigned char *pstart = NULL;
-
     const unsigned char *pImageAddr = imageBuffer;
     const unsigned char *pEncryptedBootloaderInfoBufAddr = NULL;
 
-    // Don't modify. unencrypt bootloader info
-    const int bootloaderEncryptInfoOffset = 0x10;
-    const int bootloaderEncryptInfoOffset1 = 0x70;
-    const unsigned char unencryptedBootloaderInfoBuf[] = { 0x40, 0x41, 0x4D, 0x4C};
+    // Don't modify. unencrypt bootloader info, for kernel version 3.10
+    const int bootloaderEncryptInfoOffset = 0x1b0;
+    const unsigned char unencryptedBootloaderInfoBuf[] =
+            { 0x4D, 0x33, 0x48, 0x48, 0x52, 0x45, 0x56, 0x30 };
+
+    // Don't modify. unencrypt bootloader info, for kernel version 3.14
+    const int newbootloaderEncryptInfoOffset = 0x10;
+    const int newbootloaderEncryptInfoOffset1 = 0x70;
+    const unsigned char newunencryptedBootloaderInfoBuf[] = { 0x40, 0x41, 0x4D, 0x4C};
 
     if (strcmp(imageName, BOOTLOADER_IMG)) {
         printf("this image must be %s,but it is %s\n",
@@ -152,16 +148,25 @@ static int IsGxbabyBootloaderImageEncrypted(
         return -1;
     }
 
-    pEncryptedBootloaderInfoBufAddr = pImageAddr + bootloaderEncryptInfoOffset;
-
-    if (!memcmp(unencryptedBootloaderInfoBuf, pEncryptedBootloaderInfoBufAddr,
-        ARRAY_SIZE(unencryptedBootloaderInfoBuf))) {
-        step0 = 0;   // unencrypted
-    }else {
-        step0 = 1;   // encrypted
+    if (kernel_ver == KernelV_3_10) {
+        //check image whether encrypted for kernel 3.10
+        pEncryptedBootloaderInfoBufAddr = pImageAddr + bootloaderEncryptInfoOffset;
+        if (!memcmp(unencryptedBootloaderInfoBuf, pEncryptedBootloaderInfoBufAddr,
+            ARRAY_SIZE(unencryptedBootloaderInfoBuf))) {
+            return 0;   // unencrypted
+        } else {
+            return 1;
+        }
     }
 
-    pstart = pImageAddr + bootloaderEncryptInfoOffset1;
+    //check image whether encrypted for kernel 3.14
+    pEncryptedBootloaderInfoBufAddr = pImageAddr + newbootloaderEncryptInfoOffset;
+    if (!memcmp(newunencryptedBootloaderInfoBuf, pEncryptedBootloaderInfoBufAddr,
+        ARRAY_SIZE(newunencryptedBootloaderInfoBuf))) {
+        step0 = 0;
+    }
+
+    pstart = pImageAddr + newbootloaderEncryptInfoOffset1;
     for (index=0;index<16;index++) {
         result ^= pstart[index];
     }
@@ -170,122 +175,11 @@ static int IsGxbabyBootloaderImageEncrypted(
         step1 = 0;
     }
 
-    if ((step0 == 0) && (step1 == 0)) {
-        return 0;       // unencrypted
-    }else if ((step0==1)&&(step1==1)){
-        return 1;       // encrypted
-    }else {
-        return -1;       //error
-    }
-}
-
-/**
-  *  --- check bootloader.img whether encrypt or not
-  *
-  *  @imageName:   bootloader.img
-  *  @imageBuffer: bootloader.img data address
-  *
-  *  return value:
-  *  <0: failed
-  *  =0: unencrypted
-  *  >0: encrypted
-  */
-static int IsBootloaderImageEncrypted(
-        const char *imageName,
-        const unsigned char *imageBuffer)
-{
-    const unsigned char *pImageAddr = imageBuffer;
-    const unsigned char *pEncryptedBootloaderInfoBufAddr = NULL;
-
-    // Don't modify. unencrypt bootloader info
-    const int bootloaderEncryptInfoOffset = 0x1b0;
-    const unsigned char unencryptedBootloaderInfoBuf[] =
-            { 0x4D, 0x33, 0x48, 0x48, 0x52, 0x45, 0x56, 0x30 };
-
-    if (strcmp(imageName, BOOTLOADER_IMG)) {
-        printf("this image must be %s,but it is %s\n",
-            BOOTLOADER_IMG, imageName);
-        return -1;
+    if ((step0 == 1) && (step0 == 1)) {
+        return 1;  // encrypted
     }
 
-    if (imageBuffer == NULL) {
-        printf("havn't malloc space for %s\n",
-            imageName);
-        return -1;
-    }
-
-    pEncryptedBootloaderInfoBufAddr = pImageAddr + bootloaderEncryptInfoOffset;
-
-    if (!memcmp(unencryptedBootloaderInfoBuf, pEncryptedBootloaderInfoBufAddr,
-        ARRAY_SIZE(unencryptedBootloaderInfoBuf))) {
-        return 0;   // unencrypted
-    }
-
-    return 1;       // encrypted
-}
-
-
-/**
-  *  --- check zip archive image whether encrypt or not
-  *   image is bootloader.img/boot.img/recovery.img
-  *
-  *  @imageName:   image name
-  *  @imageBuffer: image data address
-  *  @imageSize:   image data size
-  *
-  *  return value:
-  *  <0: failed
-  *  =0: unencrypted
-  *  >0: encrypted
-  */
-static int IsGxbabyZipArchiveImageEncrypted(
-        const char *imageName,
-        const unsigned char *imageBuffer,
-        const int imageSize)
-{
-    int ret = -1;
-    const unsigned char *pImageAddr = imageBuffer;
-
-    if (strcmp(imageName, BOOT_IMG) &&
-        strcmp(imageName, RECOVERY_IMG) &&
-        strcmp(imageName, BOOTLOADER_IMG)) {
-        printf("can't support %s at present\n",
-            imageName);
-        return -1;
-    }
-
-    if (imageBuffer == NULL) {
-        printf("havn't malloc space for %s\n",
-            imageName);
-        return -1;
-    }
-
-    if (imageSize <= 0) {
-        printf("%s size is %d\n",
-            imageName, imageSize);
-        return -1;
-    }
-
-    if (!strcmp(imageName, BOOTLOADER_IMG)) {
-        return IsGxbabyBootloaderImageEncrypted(imageName, imageBuffer);
-    }
-
-    const AmlSecureBootImgHeader encryptSecureBootImgHeader =
-        (const AmlSecureBootImgHeader)pImageAddr;
-
-    const p_AmlEncryptBootImgInfo encryptBootImgInfo =
-        &encryptSecureBootImgHeader->encrypteImgInfo;
-
-    secureDbg("magic:%s, version:0x%04x\n",
-        encryptBootImgInfo->magic, encryptBootImgInfo->version);
-
-    ret = memcmp(encryptBootImgInfo->magic, SECUREBOOT_MAGIC,
-        strlen(SECUREBOOT_MAGIC));
-    if (!ret && encryptBootImgInfo->version != 0x0) {
-        return 1;   // encrypted
-    }
-
-    return 0;       // unencrypted
+    return 0;//unencrypted
 }
 
 
@@ -334,99 +228,43 @@ static int IsZipArchiveImageEncrypted(
         return IsBootloaderImageEncrypted(imageName, imageBuffer);
     }
 
-    const pT_SecureBootImgHdr encryptSecureBootImgHdr =
-        (const pT_SecureBootImgHdr)pImageAddr;
-    const pT_EncryptBootImgInfo encryptBootImgInfo =
-        &encryptSecureBootImgHdr->encryptBootImgInfo;
+    if (kernel_ver == KernelV_3_10) {
+        //check image whether encrypted for kernel 3.10
+        const pT_SecureBootImgHdr encryptSecureBootImgHdr =
+            (const pT_SecureBootImgHdr)pImageAddr;
+        const pT_EncryptBootImgInfo encryptBootImgInfo =
+            &encryptSecureBootImgHdr->encryptBootImgInfo;
 
-    secureDbg("magic:%s, version:0x%04x, totalLenAfterEncrypted:0x%0x\n",
-        encryptBootImgInfo->magic, encryptBootImgInfo->version,
-        encryptBootImgInfo->totalLenAfterEncrypted);
+        secureDbg("magic:%s, version:0x%04x, totalLenAfterEncrypted:0x%0x\n",
+            encryptBootImgInfo->magic, encryptBootImgInfo->version,
+            encryptBootImgInfo->totalLenAfterEncrypted);
 
-    ret = memcmp(encryptBootImgInfo->magic, SECUREBOOT_MAGIC,
+        ret = memcmp(encryptBootImgInfo->magic, SECUREBOOT_MAGIC,
+            strlen(SECUREBOOT_MAGIC));
+        if (!ret && encryptBootImgInfo->version != 0x0) {
+            return 1;   // encrypted
+        }
+
+        return 0;
+    }
+
+    //check image whether encrypted for kernel 3.14
+    const AmlSecureBootImgHeader encryptSecureBootImgHeader =
+        (const AmlSecureBootImgHeader)pImageAddr;
+    const p_AmlEncryptBootImgInfo encryptBootImgHeader =
+        &encryptSecureBootImgHeader->encrypteImgInfo;
+
+    secureDbg("magic:%s, version:0x%04x\n",
+        encryptBootImgHeader->magic, encryptBootImgHeader->version);
+
+    ret = memcmp(encryptBootImgHeader->magic, SECUREBOOT_MAGIC,
         strlen(SECUREBOOT_MAGIC));
-    if (!ret && encryptBootImgInfo->version != 0x0) {
+    if (!ret && encryptBootImgHeader->version != 0x0) {
         return 1;   // encrypted
     }
 
     return 0;       // unencrypted
-}
-
-
-/**
-  *  --- check Gxbaby platform whether encrypt or not
-  *
-  *  return value:
-  *  <0: failed
-  *  =0: unencrypted
-  *  >0: encrypted
-  */
-static int IsGxbabyPlatformEncrypted(void)
-{
-    int len = 0;
-    int ret = 0;
-    int dev_fd = 0;
-    int dump_fd = 0;
-    int secure_flag = 0;
-    char *ptmp = NULL;
-    char buffer[128] = {0};
-    int offset = strlen(HEAD_INFO)+2;
-
-    scan_mounted_volumes();
-    const MountedVolume* vol = find_mounted_volume_by_mount_point(MOUNT_POINT);
-    if (vol == NULL) {
-        ret = mount(DEBUGFS_PATH, MOUNT_POINT,"debugfs", MS_MGC_VAL, NULL);
-        if (ret < 0) {
-            printf("mount %s failed! ret = %d\n", DEBUGFS_PATH, ret);
-            return -1;
-        }
-    }
-
-    dev_fd = open(SECUR_REGFILE, O_RDWR);
-    if (dev_fd < 0) {
-        printf("open paddr failed!\n");
-        umount(MOUNT_POINT);
-        return -1;
-    }
-
-    len = write(dev_fd, REG_ADDR, sizeof(REG_ADDR));
-    if (len != sizeof(REG_ADDR)) {
-        printf("write paddr failed!, len = %d, plan = %d\n",
-                len, sizeof(REG_ADDR));
-        close(dev_fd);
-        umount(MOUNT_POINT);
-        return -1;
-    }
-
-    dump_fd = open(SECUR_DUMP, O_RDWR);
-    if (dump_fd < 0) {
-        printf("open dump failed!\n");
-        close(dev_fd);
-        umount(MOUNT_POINT);
-        return -1;
-    }
-
-    len = write(dump_fd, REG_ADDR, sizeof(REG_ADDR));
-
-    len = read(dev_fd, buffer, 128 );
-
-    ptmp = buffer + offset;
-    secure_flag = (strtol(ptmp, NULL, 16) & (1U<<4));
-    secure_flag = secure_flag>>4;
-    if (secure_flag == 0) {
-        printf("Platform unencrypted!\n");
-        ret = 0;
-    }else{
-        printf("Platform encrypted!\n");
-        ret = 1;
-    }
-
-    close(dev_fd);
-    close(dump_fd);
-    umount(MOUNT_POINT);
-    return ret;
-
-}
+ }
 
 /**
   *  --- check platform whether encrypt or not
@@ -443,16 +281,21 @@ static int IsPlatformEncrypted(void)
     char rBuf[128] = {0};
     char platform[PROPERTY_VALUE_MAX+1] = {0};
 
-    if (access(SECURE_CHECK, F_OK) || access(DEFEND_KEY, F_OK)) {
+    if (!(access(SECURE_CHECK, F_OK) || (access(SECURE_CHECK_BAK, F_OK))) \
+        || access(DEFEND_KEY, F_OK)) {
         printf("kernel doesn't support secure check\n");
         return 2;   // kernel doesn't support
     }
 
     fd = open(SECURE_CHECK, O_RDONLY);
     if (fd <= 0) {
-        printf("open %s failed (%s)\n",
+        fd = open(SECURE_CHECK_BAK, O_RDONLY);
+        if (fd <= 0) {
+            printf("open %s failed (%s)\n",
             SECURE_CHECK, strerror(errno));
-        return -1;
+            return -1;
+        }
+        kernel_ver = KernelV_3_14;
     }
 
     property_get("ro.build.product", platform, "unknow");
@@ -460,6 +303,7 @@ static int IsPlatformEncrypted(void)
     if (count <= 0) {
         printf("read %s failed (count:%d)\n",
             SECURE_CHECK, count);
+        close(fd);
         return -1;
     }
     rBuf[count] = '\0';
@@ -550,7 +394,7 @@ FREE_IMAGE_MEM:
   *  --- check platform and upgrade package whether
   *  encrypted,if all encrypted,rsa whether all the same
   *
-  *  @zipPath: upgrade package path
+  *  @ziparchive: Archive of  Zip Package
   *
   *  return value:
   *  =-1: failed; not allow upgrade
@@ -558,7 +402,7 @@ FREE_IMAGE_MEM:
   *  = 1: check match; allow upgrade
   *  = 2: kernel not support secure check; allow upgrade
   */
-int RecoverySecureCheck(const char *zipPath)
+int RecoverySecureCheck(const ZipArchive zipArchive)
 {
     int i = 0, ret = -1, err = -1;
     int imageSize = 0;
@@ -569,21 +413,10 @@ int RecoverySecureCheck(const char *zipPath)
             BOOT_IMG,
             RECOVERY_IMG };
 
-    ui->Print("\n-- Secure Check...\n");
-
     property_get("ro.board.platform", platform, "unknow");
     printf("platform:%s\n", platform);
 
-    if (strcmp(platform, "gxbaby") == 0) {
-        isGxbaby = 1;
-    }
-
-    if (isGxbaby) {
-        platformEncryptStatus = IsGxbabyPlatformEncrypted();
-    }else{
-        platformEncryptStatus = IsPlatformEncrypted();
-    }
-
+    platformEncryptStatus = IsPlatformEncrypted();
     if (platformEncryptStatus ==  2) {
         return 2;// kernel doesn't support
     }
@@ -592,54 +425,36 @@ int RecoverySecureCheck(const char *zipPath)
         return -1;
     }
 
-    MemMapping map;
-    if (sysMapFile(zipPath, &map) != 0) {
-        printf("map file failed\n");
-        return -1;
-    }
-
-    ZipArchive zipArchive;
-    err = mzOpenZipArchive(map.addr, map.length, &zipArchive);
-    if (err != 0) {
-        printf("can't open %s (%s)\n",
-            zipPath, err != -1 ? strerror(err) : "bad");
-        goto ERR1;
-    }
-
     for (i = 0; i < ARRAY_SIZE(pImageName); i++) {
         ret = GetZipArchiveImage(zipArchive, pImageName[i], &imageSize);
         if (ret < 0) {
             printf("get %s datas failed\n", pImageName[i]);
-           goto ERR2;
+           goto ERR1;
         } else if (ret == 0) {
             printf("check %s: not find,skiping...\n", pImageName[i]);
             continue;
         } else if (ret > 0) {
             secureDbg("get %s datas(size:0x%0x, addr:0x%x) successful\n",
                 pImageName[i], imageSize, (int)s_pImageBuffer);
-                if (isGxbaby) {
-                    imageEncryptStatus = IsGxbabyZipArchiveImageEncrypted(pImageName[i], s_pImageBuffer, imageSize);
-                }else{
-                    imageEncryptStatus = IsZipArchiveImageEncrypted(pImageName[i], s_pImageBuffer, imageSize);
-                }
+            imageEncryptStatus = IsZipArchiveImageEncrypted(pImageName[i], s_pImageBuffer, imageSize);
 
-                printf("check %s: %s\n",
-                pImageName[i], (imageEncryptStatus < 0) ? "failed" :
-                !imageEncryptStatus ? "unencrypted" : "encrypted");
+            printf("check %s: %s\n",
+            pImageName[i], (imageEncryptStatus < 0) ? "failed" :
+            !imageEncryptStatus ? "unencrypted" : "encrypted");
             if (imageEncryptStatus < 0) {
                 ret = -1;
-                goto ERR3;
+                goto ERR1;
             }
 
             ret = IsPlatformMachWithZipArchiveImage(
                 platformEncryptStatus, imageEncryptStatus, pImageName[i],
                 s_pImageBuffer, imageSize);
-            if (ret < 0) {
+           if (ret < 0) {
                 printf("%s match platform failed\n", pImageName[i]);
-                goto ERR3;
+                goto ERR1;
             } else if (ret == 0) { // if one of image doesn't match with platform,exit
                 printf("%s doesn't match platform\n", pImageName[i]);
-                goto ERR3;
+                goto ERR1;
             } else {
                 secureDbg("%s match platform\n", pImageName[i]);
             }
@@ -651,23 +466,14 @@ int RecoverySecureCheck(const char *zipPath)
         }
     }
 
-    mzCloseZipArchive(&zipArchive);
-    sysReleaseMap(&map);
-
     return 1;
 
 
-ERR3:
+ERR1:
     if (s_pImageBuffer != NULL) {
         free(s_pImageBuffer);
         s_pImageBuffer = NULL;
     }
-
-ERR2:
-    mzCloseZipArchive(&zipArchive);
-
-ERR1:
-    sysReleaseMap(&map);
 
     return ret;
 }

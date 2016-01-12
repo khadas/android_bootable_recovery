@@ -221,17 +221,6 @@ really_install_package(const char *path, bool* wipe_cache, bool needs_mount)
         }
     }
 
-    /* Try to secure check.
-     */
-    int check = RecoverySecureCheck(path);
-    if (check <= 0) {
-        ui->Print("Secure check failed. %s\n\n",
-            !check ? "(Not match)" : "");
-        return INSTALL_CORRUPT;
-    } else if (check == 1) {
-        ui->Print("Secure check complete.\n\n");
-    }
-
     MemMapping map;
     if (sysMapFile(path, &map) != 0) {
         LOGE("failed to map file\n");

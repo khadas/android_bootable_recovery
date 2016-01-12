@@ -99,6 +99,8 @@ static int open_png(const char* name, png_structp* png_ptr, png_infop* info_ptr,
     *channels = png_get_channels(*png_ptr, *info_ptr);
     if (bit_depth == 8 && *channels == 3 && color_type == PNG_COLOR_TYPE_RGB) {
         // 8-bit RGB images: great, nothing to do.
+    } else if (bit_depth == 8 && *channels == 4 && color_type == PNG_COLOR_TYPE_RGB_ALPHA) {
+       //  8-bit RGBA images: great, nothing to do.
     } else if (bit_depth <= 8 && *channels == 1 && color_type == PNG_COLOR_TYPE_GRAY) {
         // 1-, 2-, 4-, or 8-bit gray images: expand to 8-bit gray.
         png_set_expand_gray_1_2_4_to_8(*png_ptr);

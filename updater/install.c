@@ -2169,6 +2169,33 @@ Value* Tune2FsFn(const char* name, State* state, int argc, Expr* argv[]) {
     return StringValue(strdup("t"));
 }
 
+Value* OtaZipCheck(const char* name, State* state, int argc, Expr* argv[]) {
+
+    int check = 0;
+    UpdaterInfo* ui = (UpdaterInfo*)(state->cookie);
+    ZipArchive* za = ((UpdaterInfo*)(state->cookie))->package_zip;
+
+    printf("\n-- Secure Check...\n");
+
+    check = RecoverySecureCheck(*za);
+    if (check <= 0) {
+        return ErrorAbort(state, "Secure check failed. %s\n\n", !check ? "(Not match)" : "");
+    } else if (check == 1) {
+        printf("Secure check complete.\n\n");
+    }
+#ifndef RECOVERY_DISABLE_DTB_CHECK
+    printf("\n-- Dtb Check...\n");
+
+    check = RecoveryDtbCheck(*za);
+    if (check != 0) {
+        return ErrorAbort(state, "Dtb check failed. %s\n\n", !check ? "(Not match)" : "");
+    } else {
+        printf("dtb check complete.\n\n");
+    }
+#endif
+    return StringValue(strdup("1"));
+}
+
 void RegisterInstallFunctions() {
     RegisterFunction("mount", MountFn);
     RegisterFunction("is_mounted", IsMountedFn);
@@ -2223,4 +2250,5 @@ void RegisterInstallFunctions() {
 
     RegisterFunction("set_bootloader_env", SetBootloaderEnvFn);
     RegisterFunction("tune2fs", Tune2FsFn);
+    RegisterFunction("ota_zip_check", OtaZipCheck);
 }

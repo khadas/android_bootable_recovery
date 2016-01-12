@@ -19,6 +19,10 @@ LOCAL_MODULE_TAGS := eng
 
 LOCAL_SRC_FILES := $(updater_src_files)
 
+ifeq ($(TARGET_RECOVERY_DISABLE_DTB_CHECK),true)
+LOCAL_CFLAGS += -DRECOVERY_DISABLE_DTB_CHECK
+endif # TARGET_RECOVERY_DISABLE_DTB_CHECK == true
+
 LOCAL_CFLAGS += -DUSE_EXT4
 LOCAL_CFLAGS += -Wno-unused-parameter
 LOCAL_C_INCLUDES += system/extras/ext4_utils
@@ -29,7 +33,7 @@ LOCAL_STATIC_LIBRARIES += \
 
 LOCAL_STATIC_LIBRARIES += $(TARGET_RECOVERY_UPDATER_LIBS) $(TARGET_RECOVERY_UPDATER_EXTRA_LIBS)
 LOCAL_STATIC_LIBRARIES += libenv libsystemcontrol_static libapplypatch libedify libmtdutils libminzip libz
-LOCAL_STATIC_LIBRARIES += libmincrypt libbz
+LOCAL_STATIC_LIBRARIES += libmincrypt libbz libsecurity libfdt
 LOCAL_STATIC_LIBRARIES += libcutils liblog libstdc++ libc
 LOCAL_STATIC_LIBRARIES += libselinux
 tune2fs_static_libraries := \

@@ -81,6 +81,8 @@ static const struct option OPTIONS[] = {
   { "update_patch", required_argument, NULL, 'e' },
   { "write_key", required_argument, NULL, 'k' },
   { "data_ro_wipe", no_argument, NULL, 'y' },
+  { "setenv", required_argument, NULL, 'n' },
+  { "getenv", required_argument, NULL, 'm' },
   { NULL, 0, NULL, 0 },
 };
 
@@ -1468,6 +1470,8 @@ main(int argc, char **argv) {
     bool just_exit = false;
     bool shutdown_after = false;
     char *key_optarg = NULL;
+    char *env_set = NULL;
+    char *env_get = NULL;
     int data_ro_wipe = 0;
 
     int arg;
@@ -1497,6 +1501,8 @@ main(int argc, char **argv) {
         }
         case 'p': shutdown_after = true; break;
         case 'r': reason = optarg; break;
+        case 'n': env_set = optarg; break;
+        case 'm': env_get = optarg; break;
         case '?':
             LOGE("Invalid command argument\n");
             continue;
@@ -1646,6 +1652,26 @@ main(int argc, char **argv) {
         ui->Print("\nInstall from ADB complete (status: %d).\n", status);
         if (sideload_auto_reboot) {
             ui->Print("Rebooting automatically.\n");
+        }
+    }
+
+    if (env_set != NULL) {
+        if (set_env_optarg(env_set) < 0) {
+            ui->Print("Set env failed.\n");
+            ui->ShowText(true);
+        } else {
+            ui->Print("Set env complete.\n");
+            ui->ShowText(true);
+        }
+    }
+
+    if (env_get != NULL) {
+        if (get_env_optarg(env_get) < 0) {
+            ui->Print("Get env failed.\n");
+            ui->ShowText(true);
+        } else {
+            ui->Print("Get env complete.\n");
+            ui->ShowText(true);
         }
     }
 

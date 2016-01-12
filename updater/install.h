@@ -19,6 +19,11 @@
 
 void RegisterInstallFunctions();
 
+int RecoverySecureCheck(const ZipArchive zipArchive);
+
+int RecoveryDtbCheck(const ZipArchive zipArchive);
+
+
 static int make_parents(char* name);
 
 #endif

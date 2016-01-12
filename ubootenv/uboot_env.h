@@ -16,3 +16,11 @@ extern int set_bootloader_env(const char* name, const char* value);
 * NONE NULL: env value
 */
 extern char *get_bootloader_env(const char * name);
+
+
+
+extern int set_env_optarg(const char * optarg);
+
+
+
+extern int get_env_optarg(const char * optarg);

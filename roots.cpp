@@ -381,7 +381,7 @@ int ensure_path_mounted(const char* path) {
     } else if (strcmp(v->fs_type, "vfat") == 0 ||
                strcmp(v->fs_type, "auto") == 0 ) {
         if (strstr(v->mount_point, "sdcard") || strstr(v->mount_point, "udisk")){
-            int time_out = 400000;
+            int time_out = 2000000;
             while (time_out) {
                 if (!smart_device_mounted(v)) {
                     return 0;

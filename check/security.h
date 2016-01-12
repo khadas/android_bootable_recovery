@@ -36,20 +36,20 @@
 #define SECURE_CHECK \
         "/sys/class/defendkey/defendkey/secure_check"
 
+#define SECURE_CHECK_BAK \
+        "/sys/class/defendkey/secure_check"
 
-//eg: [0xc8100228] = 0xE0FC3184
-#define REG_ADDR      "c8100228"
-#define HEAD_INFO        "[0xc8100228] = 0x"
-#define DEBUGFS_PATH  "/debugfs"
-#define MOUNT_POINT  "/sys/kernel/debug"
-#define SECUR_REGFILE  "/sys/kernel/debug/aml_reg/paddr"
-#define SECUR_DUMP  "/sys/kernel/debug/aml_reg/dump"
 
 #ifndef SECURITY_DEBUG
 #define secureDbg(fmt ...)
 #else
 #define secureDbg(fmt ...) printf(fmt)
 #endif
+
+typedef enum Kernel_version {
+    KernelV_3_10,
+    KernelV_3_14
+}T_KernelVersion;
 
 typedef enum SecureCheck {
     FAIL,
@@ -95,7 +95,7 @@ typedef struct EncryptBootImgInfo {
 
 typedef struct SecureBootImgHdr {
     T_NormalBootImgHdr normalBootImgHdr;
-    unsigned char reserve4Other[1024 - sizeof(normalBootImgHdr)];
+    unsigned char reserve4Other[1024 - sizeof(T_NormalBootImgHdr)];
     T_EncryptBootImgInfo encryptBootImgInfo;
 } *pT_SecureBootImgHdr;
 
@@ -141,6 +141,6 @@ typedef struct _boot_img_hdr_secure_boot
 }*AmlSecureBootImgHeader;
 
 
-extern RecoveryUI *ui;
+//extern RecoveryUI *ui;
 
 #endif  /* _SECURITY_H_ */
