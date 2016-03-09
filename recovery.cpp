@@ -50,6 +50,8 @@
 #include "fuse_sideload.h"
 #include "fuse_sdcard_provider.h"
 
+#include "ubootenv/set_display_mode.h"
+
 #include "misc/misc.h"
 
 extern "C" {
@@ -1436,6 +1438,8 @@ int
 main(int argc, char **argv) {
     time_t start = time(NULL);
     redirect_stdio(TEMPORARY_LOG_FILE);
+
+    set_display_mode("/etc/mesondisplay.cfg");
 
     // If this binary is started with the single argument "--adbd",
     // instead of being the normal recovery binary, it turns into kind
