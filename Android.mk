@@ -82,6 +82,7 @@ LOCAL_STATIC_LIBRARIES := \
     libm \
     libenv \
     libsystemcontrol_static \
+    libremotecfg_static \
     libc
 
 ifeq ($(TARGET_USERIMAGES_USE_EXT4), true)

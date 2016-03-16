@@ -179,6 +179,11 @@ char g_save_name[SAVE_MAX][PATH_MAX] = {0};
 static const int MAX_ARG_LENGTH = 4096;
 static const int MAX_ARGS = 100;
 
+extern "C"
+{
+    extern int remoteinit(const char* path);
+}
+
 // open a given path, mounting partitions as necessary
 FILE*
 fopen_path(const char *path, const char *mode) {
@@ -1440,6 +1445,7 @@ main(int argc, char **argv) {
     redirect_stdio(TEMPORARY_LOG_FILE);
 
     set_display_mode("/etc/mesondisplay.cfg");
+    remoteinit("/etc/remote.conf");
 
     // If this binary is started with the single argument "--adbd",
     // instead of being the normal recovery binary, it turns into kind
