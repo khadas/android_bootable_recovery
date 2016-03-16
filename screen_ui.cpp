@@ -330,7 +330,7 @@ void ScreenRecoveryUI::ProgressThreadLoop() {
         // update the installation animation, if active
         // skip this if we have a text overlay (too expensive to update)
         if ((currentIcon == INSTALLING_UPDATE || currentIcon == ERASING) &&
-            installing_frames > 0 && !show_text) {
+            installing_frames > 0/* && !show_text*/) {
             installingFrame = (installingFrame + 1) % installing_frames;
             redraw = 1;
         }
