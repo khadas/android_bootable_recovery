@@ -42,7 +42,8 @@ LOCAL_SRC_FILES := \
     ui.cpp \
     verifier.cpp \
     misc/key.cpp \
-    misc/adb_sideload.cpp
+    misc/adb_sideload.cpp \
+    wear_ui.cpp
 
 LOCAL_MODULE := recovery
 
