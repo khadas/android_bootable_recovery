@@ -36,6 +36,7 @@ struct fdt_header *working_fdt;
 static Dtb_Partition_S dtb_zip[24];
 static Dtb_Partition_S dtb_dev[24];
 
+unsigned int recovery_size1 = 32*1024*1024; //default value 32M
 
 struct Dtb_header {
 	unsigned int  dt_magic;
@@ -608,6 +609,11 @@ RecoveryDtbCheck(const ZipArchive zipArchive){
     for (i=0; i<partition_num_dev;i++) {
         printf("%s:0x%08x\n", dtb_zip[i].partition_name, dtb_zip[i].partition_size);
         printf("%s:0x%08x\n", dtb_dev[i].partition_name, dtb_dev[i].partition_size);
+
+        if (!strcmp("recovery", dtb_dev[i].partition_name)) {
+            recovery_size1 = dtb_zip[i].partition_size;
+        }
+
         if ((strcmp(dtb_zip[i].partition_name, dtb_dev[i].partition_name) != 0)||
                 (dtb_zip[i].partition_size != dtb_dev[i].partition_size))
         {

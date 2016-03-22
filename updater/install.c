@@ -47,6 +47,7 @@
 #include "updater.h"
 #include "install.h"
 #include "ubootenv/uboot_env.h"
+#include "check/dtbcheck.h"
 #include "tune2fs.h"
 
 #include "make_ext4fs.h"
@@ -1324,7 +1325,7 @@ int uboot_sha_check(Value* contents, int fd, int flag)
 //Ignore mbr since mmc driver already handled
 //#define MMC_UBOOT_CLEAR_MBR
 
-char *block_write_data( Value* contents, char * name)
+char *block_write_data( Value* contents, char * name, unsigned long int offset)
 {
     char devname[64] = {0};
     int fd = -1;
@@ -1460,6 +1461,7 @@ char *block_write_data( Value* contents, char * name)
             }
             int read;
             while (success && (read = fread(buffer, 1, BUFSIZ, f)) > 0) {
+                lseek(fd, offset, SEEK_SET);
                 int wrote = write_data(fd, buffer, read);
                 success = success && (wrote == read);
             }
@@ -1467,6 +1469,7 @@ char *block_write_data( Value* contents, char * name)
             fclose(f);
         } else {
             printf("%s contents type: VAL_BLOB\n", name);
+            lseek(fd, offset, SEEK_SET);
             ssize_t wrote = write_data(fd, contents->data, contents->size);
             success = (wrote == contents->size);
         }
@@ -1485,6 +1488,45 @@ done:
         close(fd);
         fd = -1;
     }
+    return result;
+}
+
+char *block_write_recovery(Value* contents, char * name) {
+    char *result = NULL;
+    char *tmpbuff[64] = {0};
+    unsigned long int offset1 = 0;
+    unsigned long int offset2 = 0;
+    unsigned long int offset_len = 0;
+
+    char *tmp = get_bootloader_env("recovery_offset");
+    if ((!tmp) || (!strcmp(tmp, ""))) {
+        offset_len = 0;
+    } else {
+        offset_len = strtoul(tmp, NULL, 10);
+    }
+
+    printf("offset_len:%d, recovery_size1:%d\n", offset_len, recovery_size1);
+
+    if (offset_len == 0) {
+        offset1 = recovery_size1/2;
+    } else {
+        offset2 = recovery_size1/2;
+    }
+
+    printf("offset1:%d, offset2:%d\n", offset1, offset2);
+
+    result = block_write_data(contents, name, offset1);
+    if (result) {
+        sprintf(tmpbuff, "%d", offset1);
+        set_bootloader_env("recovery_offset", tmpbuff);
+    }
+
+    result = block_write_data(contents, name, offset2);
+    if (result) {
+        sprintf(tmpbuff, "%d", offset2);
+        set_bootloader_env("recovery_offset", tmpbuff);
+    }
+
     return result;
 }
 
@@ -1580,7 +1622,7 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
         printf("new nand driver\n");
         if(!strncmp(partition, "bootloader", strlen("bootloader"))) {// write uboot image
             sEmmcPartionIndex = USER;
-            result = block_write_data(contents, partition);
+            result = block_write_data(contents, partition, 0);
             if (!strcmp(result, partition)) {
                 printf("Write Uboot Image successful!\n\n");
             } else {
@@ -1596,7 +1638,7 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
                 sprintf(emmcPartitionPath, "/dev/block/%s", sEmmcPartionName[i]);
                 if(!access(emmcPartitionPath, F_OK)) {
                     sEmmcPartionIndex = i;
-                    result = block_write_data(contents, partition);
+                    result = block_write_data(contents, partition, 0);
                     if (!strcmp(result, partition)) {
                         printf("Write Uboot Image to %s successful!\n\n", sEmmcPartionName[sEmmcPartionIndex]);
                     } else {
@@ -1607,7 +1649,15 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
                 }
             }
         } else { // write other image
-            result = block_write_data(contents, partition);
+            if (!strncmp(partition, "recovery", strlen("recovery"))) {
+                #ifndef RECOVERY_BACKUP_RECOVERY
+                 result = block_write_data(contents, partition, 0);
+                #else
+                 result = block_write_recovery(contents, partition);
+                #endif
+            } else {
+                result = block_write_data(contents, partition, 0);
+            }
         }
     }
 
