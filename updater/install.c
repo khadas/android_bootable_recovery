@@ -1551,9 +1551,17 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
         ErrorAbort(state, "partition argument to %s can't be empty", name);
         goto done;
     }
-    if (contents->type == VAL_STRING && strlen((char*) contents->data) == 0) {
-        ErrorAbort(state, "file argument to %s can't be empty", name);
-        goto done;
+
+    if (contents->type == VAL_STRING) {
+        if (strlen((char*) contents->data) == 0) {
+            ErrorAbort(state, "file argument to %s can't be empty", name);
+            goto done;
+        }
+    } else {
+        if (!contents->data || -1 == contents->size) {
+            ErrorAbort(state, "#ERR:BLOb Data extracted FAILED\n");
+            goto done;
+        }
     }
 
     if (access("/proc/ntd", F_OK) != 0) {// old nand driver
@@ -1686,15 +1694,20 @@ Value* WriteDtbImageFn(const char* name, State* state, int argc, Expr* argv[]) {
     if (contents->type == VAL_BLOB) {
         printf("contents type: VAL_BLOB\ncontents size: %d\n",
             contents->size);
-        if (contents->size > DTB_DATA_MAX) {
-            fprintf(stderr, "data size(%d) out of range size(max:%d)\n",
-                contents->size, DTB_DATA_MAX);
-            result = strdup("");
-            goto done;
+        if (!contents->data || -1 == contents->size) {
+            printf("#ERR:BLOb Data extracted FAILED for dtb\n");
+            success = 0;
+        } else {
+            if (contents->size > DTB_DATA_MAX) {
+                fprintf(stderr, "data size(%d) out of range size(max:%d)\n",
+                    contents->size, DTB_DATA_MAX);
+                result = strdup("");
+                goto done;
+            }
+            ssize_t wrote = write_chrdev_data(
+                DTB_DEV, contents->data, contents->size);
+            success = (wrote == contents->size);
         }
-        ssize_t wrote = write_chrdev_data(
-            DTB_DEV, contents->data, contents->size);
-        success = (wrote == contents->size);
     } else {
         printf("contents type: VAL_STRING\ncontents size: %d\n",
             contents->size);
