@@ -70,6 +70,9 @@ static const struct option OPTIONS[] = {
   { "wipe_data", no_argument, NULL, 'w' },
 
   { "wipe_cache", no_argument, NULL, 'c' },
+#ifdef RECOVERY_HAS_PARAM
+  { "wipe_param", no_argument, NULL, 'P' },
+#endif /*RECOVERY_HAS_PARAM */
   { "show_text", no_argument, NULL, 't' },
   { "sideload", no_argument, NULL, 's' },
   { "sideload_auto_reboot", no_argument, NULL, 'a' },
@@ -103,6 +106,9 @@ static const char *TEMPORARY_LOG_FILE = "/tmp/recovery.log";
 static const char *TEMPORARY_INSTALL_FILE = "/tmp/last_install";
 static const char *LAST_KMSG_FILE = "/cache/recovery/last_kmsg";
 static const char *LAST_LOG_FILE = "/cache/recovery/last_log";
+#ifdef RECOVERY_HAS_PARAM
+    static const char *PARAM_ROOT = "/param";
+#endif /* RECOVERY_HAS_PARAM */
 static const int KEEP_LOG_COUNT = 10;
 
 #define KEEP_LOG_COUNT 10
@@ -381,6 +387,7 @@ factory_reset_poweroff_protect(int *argc, char ***argv) {
     const char *param = NULL;
     const char *wipe_data = get_bootloader_env("wipe_data");
     const char *wipe_cache = get_bootloader_env("wipe_cache");
+    const char *wipe_param = get_bootloader_env("wipe_param");
     const char *data_condition = get_bootloader_env("data_condition");
 
     if ((wipe_data != NULL) && !strcmp(wipe_data, "failed")) {
@@ -391,6 +398,8 @@ factory_reset_poweroff_protect(int *argc, char ***argv) {
         }
     } else if((wipe_cache != NULL) && !strcmp(wipe_cache, "failed")) {
         param = "--wipe_cache";
+    } else if((wipe_param != NULL) && !strcmp(wipe_param, "failed")) {
+        param = "--wipe_param";
     }
 
     if (param != NULL) {
@@ -418,13 +427,15 @@ static void
 factory_reset_poweroff_env_set(
     const char *volume, const int flag) {
     if (volume == NULL ||
-        (strcmp(volume, "/data") && strcmp(volume, "/cache")&&strcmp(volume, "/data_condition"))) {
+        (strcmp(volume, "/data")&&strcmp(volume, "/param")&&strcmp(volume, "/cache")&&strcmp(volume, "/data_condition"))) {
         return;
     }
     const char *env_name = NULL;
     const char *env_val = flag ? "successful" : "failed";
     if (!strcmp(volume, "/cache")) {
         env_name = "wipe_cache";
+    } else if (!strcmp(volume, "/param")){
+        env_name = "wipe_param";
     } else {
         env_name = "wipe_data";
     }
@@ -1047,6 +1058,9 @@ static bool wipe_data(int should_confirm, Device* device) {
         device->PreWipeData() &&
         erase_volume("/data") &&
         erase_volume("/cache") &&
+#ifdef RECOVERY_HAS_PARAM
+        erase_volume("/param") &&
+#endif
         device->PostWipeData();
     ui->Print("Data wipe %s.\n", success ? "complete" : "failed");
     return success;
@@ -1336,6 +1350,14 @@ prompt_and_wait(Device* device, int status) {
                 wipe_cache(ui->IsTextVisible(), device);
                 if (!ui->IsTextVisible()) return Device::NO_ACTION;
                 break;
+#ifdef RECOVERY_HAS_PARAM
+                case Device::WIPE_PARAM:
+                    ui->Print("\n-- Wiping param...\n");
+                    erase_volume("/param");
+                    ui->Print("Param wipe complete.\n");
+                    if (!ui->IsTextVisible()) return Device::NO_ACTION;
+                    break;
+#endif /* RECOVERY_HAS_PARAM */
 
             case Device::APPLY_EXT:
                 ext_update(device, should_wipe_cache);
@@ -1347,7 +1369,6 @@ prompt_and_wait(Device* device, int status) {
                 break;
 
             case Device::APPLY_ADB_SIDELOAD:
-            case Device::APPLY_SDCARD:
                 {
                     bool adb = (chosen_action == Device::APPLY_ADB_SIDELOAD);
                     if (adb) {
@@ -1473,10 +1494,12 @@ main(int argc, char **argv) {
     bool show_text = false;
     bool sideload = false;
     bool sideload_auto_reboot = false;
-	bool wipe_data_condition = false;
+    bool wipe_data_condition = false;
     const char *update_patch = NULL;
     bool force_stop = false;
-
+#ifdef RECOVERY_HAS_PARAM
+    int wipe_param = 0;
+#endif /* RECOVERY_HAS_PARAM */
     bool just_exit = false;
     bool shutdown_after = false;
     char *key_optarg = NULL;
@@ -1501,6 +1524,9 @@ main(int argc, char **argv) {
         case 'k': key_optarg = optarg; break;
         case 'f': force_stop = true; break;
         case 'y': data_ro_wipe = 1; break;
+#ifdef RECOVERY_HAS_PARAM
+        case 'P': wipe_param = 1; break;
+#endif /* RECOVERY_HAS_PARAM */
         case 'g': {
             if (stage == NULL || *stage == '\0') {
                 char buffer[20] = "1/";
@@ -1620,6 +1646,13 @@ main(int argc, char **argv) {
             }
         }
     }
+
+#ifdef RECOVERY_HAS_PARAM
+    if (wipe_param) {
+        if (wipe_param && erase_volume(PARAM_ROOT)) status = INSTALL_ERROR;
+        if (status != INSTALL_SUCCESS) ui->Print("Param wipe failed.\n");
+    }
+#endif /* RECOVERY_HAS_PARAM */
 
     // Recovery write keys
     if (key_optarg != NULL) {

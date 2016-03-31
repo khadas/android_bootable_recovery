@@ -59,16 +59,16 @@ class Device {
     enum BuiltinAction {
         NO_ACTION = 0,
         REBOOT = 1,
-        APPLY_SDCARD = 2,
-        APPLY_CACHE = 3,
-        APPLY_ADB_SIDELOAD = 4,
-        WIPE_DATA = 5,
-        WIPE_CACHE = 6,
-        REBOOT_BOOTLOADER = 7,
-        SHUTDOWN = 8,
-        VIEW_RECOVERY_LOGS = 9,
-        MOUNT_SYSTEM = 10,
-		APPLY_EXT = 11
+        REBOOT_BOOTLOADER = 2,
+        APPLY_EXT = 3,
+        APPLY_CACHE = 4,
+        APPLY_ADB_SIDELOAD = 5,
+        WIPE_DATA = 6,
+        WIPE_CACHE = 7,
+        WIPE_PARAM = 8,
+        MOUNT_SYSTEM = 9,
+        VIEW_RECOVERY_LOGS = 10,
+	 SHUTDOWN = 11
     };
 
     // Return the list of menu items (an array of strings,

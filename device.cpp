@@ -20,10 +20,13 @@ static const char* MENU_ITEMS[] = {
     "Reboot system now",
     "Reboot to bootloader",
     "Apply update from EXT",
-	"Apply update from cache",
+    "Apply update from cache",
     "Apply update from ADB",
     "Wipe data/factory reset",
     "Wipe cache partition",
+#ifdef RECOVERY_HAS_PARAM
+    "Wipe param partition",
+#endif
     "Mount /system",
     "View recovery logs",
     "Power off",
@@ -34,20 +37,28 @@ const char* const* Device::GetMenuItems() {
   return MENU_ITEMS;
 }
 
+Device::BuiltinAction ITEMS_ACTION[] = {Device::REBOOT,
+                                         Device::REBOOT_BOOTLOADER,
+                                         Device::APPLY_EXT,
+                                         Device::APPLY_CACHE,
+                                         Device::APPLY_ADB_SIDELOAD,
+                                         Device::WIPE_DATA,
+                                         Device::WIPE_CACHE,
+#ifdef RECOVERY_HAS_PARAM
+                                         Device::WIPE_PARAM,
+#endif
+                                         Device::MOUNT_SYSTEM,
+                                         Device::VIEW_RECOVERY_LOGS,
+                                         Device::SHUTDOWN,
+};
+
+#define NUM_ACTIONS (sizeof(ITEMS_ACTION) / sizeof(ITEMS_ACTION[0]))
+
 Device::BuiltinAction Device::InvokeMenuItem(int menu_position) {
-  switch (menu_position) {
-    case 0: return REBOOT;
-    case 1: return REBOOT_BOOTLOADER;
-	case 2: return APPLY_EXT;
-	case 3: return APPLY_CACHE;
-    case 4: return APPLY_ADB_SIDELOAD;
-    case 5: return WIPE_DATA;
-    case 6: return WIPE_CACHE;
-    case 7: return MOUNT_SYSTEM;
-    case 8: return VIEW_RECOVERY_LOGS;
-    case 9: return SHUTDOWN;
-    default: return NO_ACTION;
-  }
+    if (menu_position < NUM_ACTIONS)
+        return ITEMS_ACTION[menu_position];
+    else
+        return NO_ACTION;
 }
 
 int Device::HandleMenuKey(int key, int visible) {
