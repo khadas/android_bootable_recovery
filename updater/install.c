@@ -77,6 +77,68 @@ static const char *sEmmcPartionName[] = {
     EMMC_BLK1BOOT1_PARTITION,
 };
 
+/*
+ * return value: 0 if no error; 1 if path not existed, -1 if access failed
+ *
+ */
+static int read_sysfs_val(const char* path, char* rBuf, const unsigned bufSz, unsigned* readCnt)
+{
+        int ret = 0;
+        int fd  = -1;
+        int count = 0;
+
+        if (access(path, F_OK)) {
+                printf("path[%s] not existed\n", path);
+                return 1;
+        }
+        if (access(path, R_OK)) {
+                printf("path[%s] cannot read\n", path);
+                return -1;
+        }
+
+        fd = open(path, O_RDONLY);
+        if (fd <= 0) {
+                printf("fail in open[%s] in O_RDONLY\n", path);
+                goto _exit;
+        }
+
+        count = read(fd, rBuf, bufSz);
+        if (count <= 0) {
+                printf("read %s failed (count:%d)\n",
+                                path, count);
+                close(fd);
+                return -1;
+        }
+        *readCnt = count;
+
+        ret = 0;
+_exit:
+        if (fd > 0) close(fd);
+        return ret;
+}
+
+static int getBootloaderOffset(int* bootloaderOffset)
+{
+        const char* PathBlOff = "/sys/class/aml_store/bl_off_bytes" ;
+        int             iret  = 0;
+        int             blOff = 0;
+        char  buf[16]         = { 0 };
+        int           readCnt = 0;
+
+        iret = read_sysfs_val(PathBlOff, buf, 16, &readCnt);
+        if (iret < 0) {
+                printf("fail when read path[%s]\n", PathBlOff);
+                return __LINE__;
+        }
+        buf[readCnt] = 0;
+        *bootloaderOffset = atoi(buf);
+        printf("bootloaderOffset is %s\n", buf);
+
+        return 0;
+}
+
+static int _mmcblOffBytes = 0;
+
 void uiPrint(State* state, char* buffer) {
     char* line = strtok(buffer, "\n");
     UpdaterInfo* ui = (UpdaterInfo*)(state->cookie);
@@ -1364,6 +1426,7 @@ char *block_write_data( Value* contents, char * name, unsigned long int offset)
             printf("modify the 55 AA info for emmc uboot\n");
 #endif
 
+            lseek(fd, offset, SEEK_SET);//seek to skip mmc area since gxl
             check = uboot_sha_check(contents, fd, 1);
             if (check == 0) {
                 printf("no need to upate %s!\n", devname);
@@ -1397,6 +1460,7 @@ char *block_write_data( Value* contents, char * name, unsigned long int offset)
                 fclose(f);
             } else {
                 printf("%s contents type: VAL_BLOB\n", name);
+                lseek(fd, offset, SEEK_SET);//seek to skip mmc area since gxl
                 ssize_t wrote = write_data(fd, contents->data, contents->size);
                 success = (wrote == contents->size);
             }
@@ -1409,6 +1473,7 @@ char *block_write_data( Value* contents, char * name, unsigned long int offset)
         } else {
             printf("start to write %s to %s...\n", name, devname);
 
+            lseek(fd, offset, SEEK_SET);//seek to skip mmc area since gxl
             check = uboot_sha_check(contents, fd, 0);
             if (check == 0) {
                 printf("no need to upate %s!\n", devname);
@@ -1420,7 +1485,7 @@ char *block_write_data( Value* contents, char * name, unsigned long int offset)
             size_t len =  contents->size;
             fprintf(stderr, "data len = %d\n", len);
             int size =  contents->size;
-            off_t pos = lseek(fd, 0, SEEK_CUR);
+            off_t pos = lseek(fd, offset, SEEK_SET);//need seek one sector to skip MBR area since gxl
             /*fprintf(stderr, "data len = %d pos = %d\n", len, pos);*/
             if (/*lseek(fd, pos, SEEK_SET) != pos ||*/write(fd, contents->data, size) != size) {
                 fprintf(stderr, " write error at 0x%08lx (%s)\n",pos, strerror(errno));
@@ -1629,8 +1694,14 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
     } else { // new nand driver
         printf("new nand driver\n");
         if(!strncmp(partition, "bootloader", strlen("bootloader"))) {// write uboot image
+            int iRet = getBootloaderOffset(&_mmcblOffBytes);
+            if (iRet) {
+                    printf("Fail in getBootloaderOffset, ret=%d\n", iRet);
+                    result = strdup("bootloader err");
+                    goto done;
+            }
             sEmmcPartionIndex = USER;
-            result = block_write_data(contents, partition, 0);
+            result = block_write_data(contents, partition, _mmcblOffBytes);
             if (!strcmp(result, partition)) {
                 printf("Write Uboot Image successful!\n\n");
             } else {
@@ -1646,7 +1717,7 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
                 sprintf(emmcPartitionPath, "/dev/block/%s", sEmmcPartionName[i]);
                 if(!access(emmcPartitionPath, F_OK)) {
                     sEmmcPartionIndex = i;
-                    result = block_write_data(contents, partition, 0);
+                    result = block_write_data(contents, partition, _mmcblOffBytes);
                     if (!strcmp(result, partition)) {
                         printf("Write Uboot Image to %s successful!\n\n", sEmmcPartionName[sEmmcPartionIndex]);
                     } else {
