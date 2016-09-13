@@ -54,6 +54,9 @@
 #include "openssl/sha.h"
 #include "ota_io.h"
 #include "updater.h"
+extern "C" {
+#include "ubootenv/uboot_env.h"
+}
 #include "install.h"
 #include "tune2fs.h"
 
@@ -1066,6 +1069,79 @@ Value* FileGetPropFn(const char* name, State* state, int argc, Expr* argv[]) {
     return StringValue(result);
 }
 
+
+static int write_chrdev_data(
+    const char *dev, const char *data, ssize_t size)
+{
+    int fd = -1;
+    ssize_t wrote = 0;
+    ssize_t readed = 0;
+    char *verify = NULL;
+
+    fd = open(dev, O_RDWR);
+    if (fd < 0) {
+        fprintf(stderr, "open %s failed (%s)\n",
+            dev, strerror(errno));
+        return -1;
+    }
+
+    fprintf(stderr, "data len = %d\n", size);
+    if ((wrote = write(fd, data, size)) != size) {
+        fprintf(stderr, "wrote error, count %d (%s)\n",
+            wrote, strerror(errno));
+        goto err;
+    }
+
+    close(fd);
+    fd = open(dev, O_RDWR);
+    if (fd < 0) {
+        fprintf(stderr, "open %s failed after wrote success (%s)\n",
+            dev, strerror(errno));
+        return -1;
+    }
+
+    verify = (char *)malloc(size);
+    if (verify == NULL) {
+        fprintf(stderr, "failed to malloc size=%d (%s)\n",
+            size, strerror(errno));
+        goto err;
+    }
+
+    if ((readed = read(fd, verify, size)) != size) {
+        fprintf(stderr, "readed error, count %d (%s)\n",
+            readed, strerror(errno));
+        if (verify != NULL) {
+            free(verify);
+        }
+        goto err;
+    }
+
+    if (memcmp(data, verify, size) != 0) {
+        fprintf(stderr, "verification error, wrote != readed\n");
+        if (verify != NULL) {
+            free(verify);
+        }
+        goto err;
+    }
+
+    fprintf(stderr, " successfully wrote data\n");
+    if (verify != NULL) {
+        free(verify);
+    }
+
+    if (fd > 0) {
+        close(fd);
+    }
+    return wrote;
+
+err:
+    if (fd > 0) {
+        close(fd);
+    }
+    return -1;
+}
+
+
 // write_raw_image(filename_or_blob, partition)
 Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
     char* result = NULL;
@@ -1157,6 +1233,87 @@ done:
     FreeValue(contents);
     return StringValue(result);
 }
+
+Value* WriteDtbImageFn(const char* name, State* state, int argc, Expr* argv[]) {
+    char* result = NULL;
+    bool success = false;
+    Value* contents = NULL;
+
+    if (ReadValueArgs(state, argv, 1, &contents) < 0) {
+        fprintf(stderr, "%s: ReadValueArgs failed (%s)\n",
+            name, strerror(errno));
+        return NULL;
+    }
+
+    const char *DTB_DEV=  "/dev/dtb";
+    // write 256K dtb datas to dtb device maximum,kernel limit
+    const int DTB_DATA_MAX =  256*1024;
+    printf("\nstart to write dtb.img to %s...\n", DTB_DEV);
+
+    if (contents->type == VAL_BLOB) {
+        printf("contents type: VAL_BLOB\ncontents size: %d\n",
+            contents->size);
+        if (!contents->data || -1 == contents->size) {
+            printf("#ERR:BLOb Data extracted FAILED for dtb\n");
+            success = 0;
+        } else {
+            if (contents->size > DTB_DATA_MAX) {
+                fprintf(stderr, "data size(%d) out of range size(max:%d)\n",
+                    contents->size, DTB_DATA_MAX);
+                result = strdup("");
+                goto done;
+            }
+            ssize_t wrote = write_chrdev_data(
+                DTB_DEV, contents->data, contents->size);
+            success = (wrote == contents->size);
+        }
+    } else {
+        printf("contents type: VAL_STRING\ncontents size: %d\n",
+            contents->size);
+        char* filename = contents->data;
+        FILE* f = fopen(filename, "rb");
+        if (f == NULL) {
+            fprintf(stderr, "can't open %s: %s\n",
+                filename, strerror(errno));
+            result = strdup("");
+            goto done;
+        }
+
+        char* buffer = (char *)malloc(DTB_DATA_MAX+256);
+        if (buffer == NULL) {
+            fprintf(stderr, "can't malloc (%s)\n", strerror(errno));
+            result = strdup("");
+            goto done;
+        }
+
+        int readsize = 0;
+        readsize = fread(buffer, 1, DTB_DATA_MAX+256, f);
+        if (readsize > DTB_DATA_MAX) {
+            fprintf(stderr, "data size(%d) out of range size(max:%d)\n",
+                readsize, DTB_DATA_MAX);
+            result = strdup("");
+        }
+        int wrote = write_chrdev_data(DTB_DEV, buffer, readsize);
+        success = (wrote == readsize);
+        free(buffer);
+        fclose(f);
+    }
+
+    if (!success) {
+        fprintf(stderr, "write_data to %s failed (%s)\n",
+            DTB_DEV, strerror(errno));
+    } else {
+        printf("write_data to %s successful\n",
+            DTB_DEV);
+    }
+
+    result = success ? strdup("dtb") : strdup("");
+
+done:
+    FreeValue(contents);
+    return StringValue(result);
+}
+
 
 // apply_patch_space(bytes)
 Value* ApplyPatchSpaceFn(const char* name, State* state,
@@ -1558,6 +1715,43 @@ Value* EnableRebootFn(const char* name, State* state, int argc, Expr* argv[]) {
     return StringValue(strdup("t"));
 }
 
+
+Value* SetBootloaderEnvFn(const char* name, State* state, int argc, Expr* argv[])
+{
+    char* result = NULL;
+    int ret = 0;
+    if (argc != 2) {
+        return ErrorAbort(state, "%s() expects 3 args, got %d", name, argc);
+    }
+    char* env_name;
+    char* env_val;
+    if (ReadArgs(state, argv, 2, &env_name, &env_val) < 0) return NULL;
+
+    if (strlen(env_name) == 0) {
+        ErrorAbort(state, "env_name argument to %s() can't be empty", name);
+        goto done;
+    }
+
+    if (strlen(env_val) == 0) {
+        ErrorAbort(state, "env_val argument to %s() can't be empty", name);
+        goto done;
+    }
+
+    ret = set_bootloader_env(env_name, env_val);
+    if (!ret) {
+        result = env_name;
+    }
+    printf("setenv %s %s %s.(%d)\n", env_name, env_val,
+        (ret < 0) ? "failed" : "successful", ret);
+
+
+done:
+    free(env_val);
+    if (result != env_name) free(env_name);
+    return StringValue(result);
+}
+
+
 Value* Tune2FsFn(const char* name, State* state, int argc, Expr* argv[]) {
     if (argc == 0) {
         return ErrorAbort(state, kArgsParsingFailure, "%s() expects args, got %d", name, argc);
@@ -1617,6 +1811,7 @@ void RegisterInstallFunctions() {
     RegisterFunction("getprop", GetPropFn);
     RegisterFunction("file_getprop", FileGetPropFn);
     RegisterFunction("write_raw_image", WriteRawImageFn);
+    RegisterFunction("write_dtb_image", WriteDtbImageFn);
 
     RegisterFunction("apply_patch", ApplyPatchFn);
     RegisterFunction("apply_patch_check", ApplyPatchCheckFn);
@@ -1638,6 +1833,7 @@ void RegisterInstallFunctions() {
     RegisterFunction("get_stage", GetStageFn);
     RegisterFunction("set_stage", SetStageFn);
 
+    RegisterFunction("set_bootloader_env", SetBootloaderEnvFn);
     RegisterFunction("enable_reboot", EnableRebootFn);
     RegisterFunction("tune2fs", Tune2FsFn);
 }

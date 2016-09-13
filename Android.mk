@@ -83,6 +83,9 @@ LOCAL_STATIC_LIBRARIES := \
     liblog \
     libselinux \
     libm \
+    libenv \
+    libsystemcontrol_static \
+    libremotecfg_static \
     libc
 
 LOCAL_HAL_STATIC_LIBRARIES := libhealthd
@@ -149,5 +152,6 @@ include $(LOCAL_PATH)/minui/Android.mk \
     $(LOCAL_PATH)/uncrypt/Android.mk \
     $(LOCAL_PATH)/otafault/Android.mk \
     $(LOCAL_PATH)/updater/Android.mk \
+    $(LOCAL_PATH)/ubootenv/Android.mk \
     $(LOCAL_PATH)/update_verifier/Android.mk \
     $(LOCAL_PATH)/applypatch/Android.mk

@@ -271,12 +271,11 @@ static const char* LONG_PRESS_HELP[] = {
 // Redraw everything on the screen.  Does not flip pages.
 // Should only be called with updateMutex locked.
 void ScreenRecoveryUI::draw_screen_locked() {
-    if (!show_text) {
-        draw_background_locked();
-        draw_foreground_locked();
-    } else {
-        gr_color(0, 0, 0, 255);
-        gr_clear();
+    draw_background_locked();
+    draw_foreground_locked();
+    if (show_text) {
+        //gr_color(0, 0, 0, 255);
+        //gr_clear();
 
         int y = 0;
         if (show_menu) {
