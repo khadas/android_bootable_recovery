@@ -65,6 +65,94 @@ extern "C" {
 #include "wipe.h"
 #endif
 
+unsigned int recovery_size1 = 32*1024*1024; //default value 32M
+
+#define ARRAY_SIZE(x)  sizeof(x)/sizeof(x[0])
+#define EMMC_USER_PARTITION        "bootloader"
+#define EMMC_BLK0BOOT0_PARTITION   "mmcblk0boot0"
+#define EMMC_BLK0BOOT1_PARTITION   "mmcblk0boot1"
+#define EMMC_BLK1BOOT0_PARTITION   "mmcblk1boot0"
+#define EMMC_BLK1BOOT1_PARTITION   "mmcblk1boot1"
+
+enum emmcPartition {
+    USER = 0,
+    BLK0BOOT0,
+    BLK0BOOT1,
+    BLK1BOOT0,
+    BLK1BOOT1,
+};
+
+static int sEmmcPartionIndex = -1;
+static const char *sEmmcPartionName[] = {
+    EMMC_USER_PARTITION,
+    EMMC_BLK0BOOT0_PARTITION,
+    EMMC_BLK0BOOT1_PARTITION,
+    EMMC_BLK1BOOT0_PARTITION,
+    EMMC_BLK1BOOT1_PARTITION,
+};
+
+/*
+ * return value: 0 if no error; 1 if path not existed, -1 if access failed
+ *
+ */
+static int read_sysfs_val(const char* path, char* rBuf, const unsigned bufSz, int * readCnt)
+{
+        int ret = 0;
+        int fd  = -1;
+        int count = 0;
+
+        if (access(path, F_OK)) {
+                printf("path[%s] not existed\n", path);
+                return 1;
+        }
+        if (access(path, R_OK)) {
+                printf("path[%s] cannot read\n", path);
+                return -1;
+        }
+
+        fd = open(path, O_RDONLY);
+        if (fd <= 0) {
+                printf("fail in open[%s] in O_RDONLY\n", path);
+                goto _exit;
+        }
+
+        count = read(fd, rBuf, bufSz);
+        if (count <= 0) {
+                printf("read %s failed (count:%d)\n",
+                                path, count);
+                close(fd);
+                return -1;
+        }
+        *readCnt = count;
+
+        ret = 0;
+_exit:
+        if (fd > 0) close(fd);
+        return ret;
+}
+
+static int getBootloaderOffset(int* bootloaderOffset)
+{
+        const char* PathBlOff = "/sys/class/aml_store/bl_off_bytes" ;
+        int             iret  = 0;
+        int             blOff = 0;
+        char  buf[16]         = { 0 };
+        int           readCnt = 0;
+
+        iret = read_sysfs_val(PathBlOff, buf, 16, &readCnt);
+        if (iret < 0) {
+                printf("fail when read path[%s]\n", PathBlOff);
+                return __LINE__;
+        }
+        buf[readCnt] = 0;
+        *bootloaderOffset = atoi(buf);
+        printf("bootloaderOffset is %s\n", buf);
+
+        return 0;
+}
+
+static int _mmcblOffBytes = 0;
+
 // Send over the buffer to recovery though the command pipe.
 static void uiPrint(State* state, const std::string& buffer) {
     UpdaterInfo* ui = reinterpret_cast<UpdaterInfo*>(state->cookie);
@@ -1069,6 +1157,50 @@ Value* FileGetPropFn(const char* name, State* state, int argc, Expr* argv[]) {
     return StringValue(result);
 }
 
+static int write_data(int ctx, const char *data, ssize_t len)
+{
+    size_t wrote = len;
+    int fd = ctx;
+    ssize_t size = len;
+    off_t pos = lseek(fd, 0, SEEK_CUR);
+    fprintf(stderr, "data len = %d, pos = %ld\n", len, pos);
+    char *verify = NULL;
+    if (/*lseek(fd, pos, SEEK_SET) != pos ||*/
+        write(fd, data, len) != len) {
+        fprintf(stderr, " write error at 0x%08lx (%s)\n",
+        pos, strerror(errno));
+    }
+
+    verify = (char *)malloc(size);
+    if (verify == NULL) {
+        fprintf(stderr, "block: failed to malloc size=%u (%s)\n", size, strerror(errno));
+        return -1;
+    }
+
+    if (lseek(fd, pos, SEEK_SET) != pos ||
+        read(fd, verify, size) != size) {
+        fprintf(stderr, "block: re-read error at 0x%08lx (%s)\n",
+        pos, strerror(errno));
+        if (verify)
+        free(verify);
+        return -1;
+    }
+
+    if (memcmp(data, verify, size) != 0) {
+        fprintf(stderr, "block: verification error at 0x%08lx (%s)\n",
+        pos, strerror(errno));
+        if (verify)
+        free(verify);
+        return -1;
+    }
+
+    fprintf(stderr, " successfully wrote data at %ld\n", pos);
+    if (verify) {
+        free(verify);
+    }
+
+    return wrote;
+}
 
 static int write_chrdev_data(
     const char *dev, const char *data, ssize_t size)
@@ -1142,6 +1274,206 @@ err:
 }
 
 
+//Ignore mbr since mmc driver already handled
+//#define MMC_UBOOT_CLEAR_MBR
+
+char *block_write_data( Value* contents, char * name, unsigned long int offset)
+{
+    char devname[64] = {0};
+    int fd = -1;
+    int check = 0;
+    char * tmp_name = NULL;
+    char *result = NULL;
+    bool success = false;
+
+    sprintf(devname, "/dev/block/%s", name);
+    if (!strncmp(name, "bootloader", strlen("bootloader"))) {
+        memset(devname, 0, sizeof(devname));
+        sprintf(devname, "/dev/%s", name);  //nand partition
+        fd = open(devname, O_RDWR);
+        if (fd < 0) {
+            memset(devname, 0, sizeof(devname));
+            // emmc user, boot0, boot1 partition
+            sprintf(devname, "/dev/block/%s", sEmmcPartionName[sEmmcPartionIndex]);
+            fd = open(devname, O_RDWR);
+            if (fd < 0) {
+                tmp_name = "mtdblock0";
+                memset(devname, 0, sizeof(devname));
+                sprintf(devname, "/dev/block/%s", tmp_name); //spi partition
+                fd = open(devname, O_RDWR);
+                if (fd < 0) {
+                    printf("failed to open %s\n", devname);
+                    result = strdup("");
+                    goto done;
+                }
+            }
+
+            printf("start to write %s to %s...\n", name, devname);
+#ifdef MMC_UBOOT_CLEAR_MBR
+            //modify the 55 AA info for emmc uboot
+            contents->data[510] = 0;
+            contents->data[511] = 0;
+            printf("modify the 55 AA info for emmc uboot\n");
+#endif
+
+            lseek(fd, offset, SEEK_SET);//seek to skip mmc area since gxl
+
+            if (contents->type == VAL_STRING) {
+                printf("%s contents type: VAL_STRING\n", name);
+                char* filename = contents->data;
+                FILE* f = fopen(filename, "rb");
+                if (f == NULL) {
+                    fprintf(stderr, "%s: can't open %s: %s\n", name, filename, strerror(errno));
+                    result = strdup("");
+                    goto done;
+                }
+
+                success = true;
+                char* buffer = (char *)malloc(BUFSIZ);
+                if (buffer == NULL) {
+                    fprintf(stderr, "can't malloc (%s)\n", strerror(errno));
+                    result = strdup("");
+                    goto done;
+                }
+                int read;
+                while (success && (read = fread(buffer, 1, BUFSIZ, f)) > 0) {
+                    int wrote = write_data(fd, buffer, read);
+                    success = success && (wrote == read);
+                }
+                free(buffer);
+                fclose(f);
+            } else {
+                printf("%s contents type: VAL_BLOB\n", name);
+                lseek(fd, offset, SEEK_SET);//seek to skip mmc area since gxl
+                ssize_t wrote = write_data(fd, contents->data, contents->size);
+                success = (wrote == contents->size);
+            }
+
+            if (!success) {
+                fprintf(stderr, "write_data to %s partition failed: %s\n", devname, strerror(errno));
+            } else {
+                printf("write_data to %s partition successful\n", devname);
+            }
+        } else {
+            printf("start to write %s to %s...\n", name, devname);
+
+            lseek(fd, offset, SEEK_SET);//seek to skip mmc area since gxl
+            success = true;
+            size_t len =  contents->size;
+            fprintf(stderr, "data len = %d\n", len);
+            int size =  contents->size;
+            off_t pos = lseek(fd, offset, SEEK_SET);//need seek one sector to skip MBR area since gxl
+            /*fprintf(stderr, "data len = %d pos = %d\n", len, pos);*/
+            if (/*lseek(fd, pos, SEEK_SET) != pos ||*/write(fd, contents->data, size) != size) {
+                fprintf(stderr, " write error at 0x%08lx (%s)\n",pos, strerror(errno));
+                success = false;
+            }
+
+            if (!success) {
+                fprintf(stderr, "write_data to %s partition failed: %s\n", devname, strerror(errno));
+            } else {
+                printf("write_data to %s partition successful\n", devname);
+            }
+        }
+    } else {
+        fd = open(devname, O_RDWR);
+        if (fd < 0) {
+            printf("failed to open %s\n", devname);
+            result = strdup("");
+            goto done;
+        }
+
+        printf("start to write %s to %s...\n", name, devname);
+        if (contents->type == VAL_STRING) {
+            printf("%s contents type: VAL_STRING\n", name);
+            char* filename = contents->data;
+            FILE* f = fopen(filename, "rb");
+            if (f == NULL) {
+                fprintf(stderr, "%s: can't open %s: %s\n", name, filename, strerror(errno));
+                result = strdup("");
+                goto done;
+            }
+
+            success = true;
+            char* buffer = (char *)malloc(BUFSIZ);
+            if (buffer == NULL) {
+                fprintf(stderr, "can't malloc (%s)\n", strerror(errno));
+                result = strdup("");
+                goto done;
+            }
+            int read;
+            while (success && (read = fread(buffer, 1, BUFSIZ, f)) > 0) {
+                lseek(fd, offset, SEEK_SET);
+                int wrote = write_data(fd, buffer, read);
+                success = success && (wrote == read);
+            }
+            free(buffer);
+            fclose(f);
+        } else {
+            printf("%s contents type: VAL_BLOB\n", name);
+            lseek(fd, offset, SEEK_SET);
+            ssize_t wrote = write_data(fd, contents->data, contents->size);
+            success = (wrote == contents->size);
+        }
+
+        if (!success) {
+            fprintf(stderr, "write_data to %s partition failed: %s\n", devname, strerror(errno));
+        } else {
+            printf("write_data to %s partition successful\n", devname);
+        }
+    }
+
+    result = success ? name : strdup("");
+
+done:
+    if (fd > 0) {
+        close(fd);
+        fd = -1;
+    }
+    return result;
+}
+
+
+char *block_write_recovery(Value* contents, char * name) {
+    char *result = NULL;
+    char tmpbuff[64] = {0};
+    unsigned long int offset1 = 0;
+    unsigned long int offset2 = 0;
+    unsigned long int offset_len = 0;
+
+    char *tmp = get_bootloader_env("recovery_offset");
+    if ((!tmp) || (!strcmp(tmp, ""))) {
+        offset_len = 0;
+    } else {
+        offset_len = strtoul(tmp, NULL, 10);
+    }
+
+    printf("offset_len:%d, recovery_size1:%d\n", offset_len, recovery_size1);
+
+    if (offset_len == 0) {
+        offset1 = recovery_size1/2;
+    } else {
+        offset2 = recovery_size1/2;
+    }
+
+    printf("offset1:%d, offset2:%d\n", offset1, offset2);
+
+    result = block_write_data(contents, name, offset1);
+    if (result) {
+        sprintf(tmpbuff, "%d", offset1);
+        set_bootloader_env("recovery_offset", tmpbuff);
+    }
+
+    result = block_write_data(contents, name, offset2);
+    if (result) {
+        sprintf(tmpbuff, "%d", offset2);
+        set_bootloader_env("recovery_offset", tmpbuff);
+    }
+
+    return result;
+}
+
+
 // write_raw_image(filename_or_blob, partition)
 Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
     char* result = NULL;
@@ -1162,71 +1494,127 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
         ErrorAbort(state, kArgsParsingFailure, "partition argument to %s can't be empty", name);
         goto done;
     }
-    if (contents->type == VAL_STRING && strlen((char*) contents->data) == 0) {
-        ErrorAbort(state, kArgsParsingFailure, "file argument to %s can't be empty", name);
-        goto done;
+    if (contents->type == VAL_STRING ) {
+        if (strlen((char*) contents->data) == 0) {
+            ErrorAbort(state, kArgsParsingFailure, "file argument to %s can't be empty", name);
+            goto done;
+        }
+    } else {
+        if (!contents->data || -1 == contents->size) {
+            ErrorAbort(state, kArgsParsingFailure, "#ERR:BLOb Data extracted FAILED\n");
+            goto done;
+        }
     }
 
-    mtd_scan_partitions();
-    const MtdPartition* mtd;
-    mtd = mtd_find_partition_by_name(partition);
-    if (mtd == NULL) {
-        printf("%s: no mtd partition named \"%s\"\n", name, partition);
-        result = strdup("");
-        goto done;
-    }
-
-    MtdWriteContext* ctx;
-    ctx = mtd_write_partition(mtd);
-    if (ctx == NULL) {
-        printf("%s: can't write mtd partition \"%s\"\n",
-                name, partition);
-        result = strdup("");
-        goto done;
-    }
-
-    bool success;
-
-    if (contents->type == VAL_STRING) {
-        // we're given a filename as the contents
-        char* filename = contents->data;
-        FILE* f = ota_fopen(filename, "rb");
-        if (f == NULL) {
-            printf("%s: can't open %s: %s\n", name, filename, strerror(errno));
+    if (access("/proc/ntd", F_OK) != 0) {// old nand driver
+        mtd_scan_partitions();
+        const MtdPartition* mtd;
+        mtd = mtd_find_partition_by_name(partition);
+        if (mtd == NULL) {
+            printf("%s: no mtd partition named \"%s\"\n", name, partition);
             result = strdup("");
             goto done;
         }
 
-        success = true;
-        char* buffer = reinterpret_cast<char*>(malloc(BUFSIZ));
-        int read;
-        while (success && (read = ota_fread(buffer, 1, BUFSIZ, f)) > 0) {
-            int wrote = mtd_write_data(ctx, buffer, read);
-            success = success && (wrote == read);
+        MtdWriteContext* ctx;
+        ctx = mtd_write_partition(mtd);
+        if (ctx == NULL) {
+            printf("%s: can't write mtd partition \"%s\"\n",
+                    name, partition);
+            result = strdup("");
+            goto done;
         }
-        free(buffer);
-        ota_fclose(f);
-    } else {
-        // we're given a blob as the contents
-        ssize_t wrote = mtd_write_data(ctx, contents->data, contents->size);
-        success = (wrote == contents->size);
-    }
-    if (!success) {
-        printf("mtd_write_data to %s failed: %s\n",
-                partition, strerror(errno));
-    }
 
-    if (mtd_erase_blocks(ctx, -1) == -1) {
-        printf("%s: error erasing blocks of %s\n", name, partition);
-    }
-    if (mtd_write_close(ctx) != 0) {
-        printf("%s: error closing write of %s\n", name, partition);
-    }
+        bool success;
 
-    printf("%s %s partition\n",
-           success ? "wrote" : "failed to write", partition);
+        if (contents->type == VAL_STRING) {
+            // we're given a filename as the contents
+            char* filename = contents->data;
+            FILE* f = ota_fopen(filename, "rb");
+            if (f == NULL) {
+                printf("%s: can't open %s: %s\n", name, filename, strerror(errno));
+                result = strdup("");
+                goto done;
+            }
 
-    result = success ? partition : strdup("");
+            success = true;
+            char* buffer = reinterpret_cast<char*>(malloc(BUFSIZ));
+            int read;
+            while (success && (read = ota_fread(buffer, 1, BUFSIZ, f)) > 0) {
+                int wrote = mtd_write_data(ctx, buffer, read);
+                success = success && (wrote == read);
+            }
+            free(buffer);
+            ota_fclose(f);
+        } else {
+            // we're given a blob as the contents
+            ssize_t wrote = mtd_write_data(ctx, contents->data, contents->size);
+            success = (wrote == contents->size);
+        }
+        if (!success) {
+            printf("mtd_write_data to %s failed: %s\n",
+                    partition, strerror(errno));
+        }
+
+        if (mtd_erase_blocks(ctx, -1) == -1) {
+            printf("%s: error erasing blocks of %s\n", name, partition);
+        }
+        if (mtd_write_close(ctx) != 0) {
+            printf("%s: error closing write of %s\n", name, partition);
+        }
+
+        printf("%s %s partition\n",
+               success ? "wrote" : "failed to write", partition);
+
+        result = success ? partition : strdup("");
+    }else { // new nand driver
+        printf("new nand driver\n");
+        if (!strncmp(partition, "bootloader", strlen("bootloader"))) {// write uboot image
+            int iRet = getBootloaderOffset(&_mmcblOffBytes);
+            if (iRet) {
+                    printf("Fail in getBootloaderOffset, ret=%d\n", iRet);
+                    result = strdup("bootloader err");
+                    goto done;
+            }
+            sEmmcPartionIndex = USER;
+            result = block_write_data(contents, partition, _mmcblOffBytes);
+            if (!strcmp(result, partition)) {
+                printf("Write Uboot Image successful!\n\n");
+            } else {
+                printf("Write Uboot Image failed!\n\n");
+                printf("%s != %s, exit !!!\n", result, partition);
+                goto done;
+            }
+
+            unsigned int i;
+            char emmcPartitionPath[128];
+            for (i = BLK0BOOT0; i < ARRAY_SIZE(sEmmcPartionName); i ++) {
+                memset(emmcPartitionPath, 0, sizeof(emmcPartitionPath));
+                sprintf(emmcPartitionPath, "/dev/block/%s", sEmmcPartionName[i]);
+                if (!access(emmcPartitionPath, F_OK)) {
+                    sEmmcPartionIndex = i;
+                    result = block_write_data(contents, partition, _mmcblOffBytes);
+                    if (!strcmp(result, partition)) {
+                        printf("Write Uboot Image to %s successful!\n\n", sEmmcPartionName[sEmmcPartionIndex]);
+                    } else {
+                        printf("Write Uboot Image to %s failed!\n\n", sEmmcPartionName[sEmmcPartionIndex]);
+                        printf("%s != %s, exit !!!\n", result, partition);
+                        goto done;
+                    }
+                }
+            }
+        } else { // write other image
+            if (!strncmp(partition, "recovery", strlen("recovery"))) {
+                #ifndef RECOVERY_BACKUP_RECOVERY
+                 result = block_write_data(contents, partition, 0);
+                #else
+                 result = block_write_recovery(contents, partition);
+                #endif
+            } else {
+                result = block_write_data(contents, partition, 0);
+            }
+        }
+    }
 
 done:
     if (result != partition) FreeValue(partition_value);
@@ -1833,7 +2221,8 @@ void RegisterInstallFunctions() {
     RegisterFunction("get_stage", GetStageFn);
     RegisterFunction("set_stage", SetStageFn);
 
-    RegisterFunction("set_bootloader_env", SetBootloaderEnvFn);
     RegisterFunction("enable_reboot", EnableRebootFn);
+
+    RegisterFunction("set_bootloader_env", SetBootloaderEnvFn);
     RegisterFunction("tune2fs", Tune2FsFn);
 }
