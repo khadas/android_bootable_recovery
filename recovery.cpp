@@ -1602,7 +1602,9 @@ int main(int argc, char **argv) {
                 }
             }
         }
-    } else if (should_wipe_data) {
+    }
+
+    if (should_wipe_data) {
         if (!wipe_data(false, device)) {
             status = INSTALL_ERROR;
         }
