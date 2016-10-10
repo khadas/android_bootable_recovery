@@ -99,6 +99,7 @@ static const char *CONVERT_FBE_FILE = "/tmp/convert_fbe/convert_fbe";
 static const char *CACHE_ROOT = "/cache";
 static const char *DATA_ROOT = "/data";
 static const char *SDCARD_ROOT = "/sdcard";
+static const char *UDISK_ROOT = "/udisk";
 static const char *TEMPORARY_LOG_FILE = "/tmp/recovery.log";
 static const char *TEMPORARY_INSTALL_FILE = "/tmp/last_install";
 static const char *LAST_KMSG_FILE = "/cache/recovery/last_kmsg";
@@ -923,6 +924,8 @@ static bool wipe_data(int should_confirm, Device* device) {
     modified_flash = true;
 
     ui->Print("\n-- Wiping data...\n");
+    instaboot_clear();
+
     bool success =
         device->PreWipeData() &&
         erase_volume("/data") &&
@@ -1009,6 +1012,89 @@ static void choose_recovery_file(Device* device) {
         free(entries[i]);
     }
 }
+
+
+static int ext_update(Device* device, bool wipe_cache) {
+    int status = 0;
+    int found_upgrade = 0;
+    char* update_package = NULL;
+    const char** title_headers = NULL;
+    const char* headers[] = { "Confirm update?",
+                    "  THIS CAN NOT BE UNDONE.",
+                    "",
+                    NULL };
+    const char* items[] = { " ../",
+                    " Update from sdcard",
+                    " Update from udisk",
+                    NULL };
+
+
+    int chosen_item = get_menu_selection(nullptr, items, 1, 0, device);
+        if (chosen_item != 1 && chosen_item != 2){
+        return 1;
+    }
+
+    switch(chosen_item) {
+        case 1:
+            // Some packages expect /cache to be mounted (eg,
+            // standard incremental packages expect to use /cache
+            // as scratch space).
+            ensure_path_mounted(CACHE_ROOT);
+            ensure_path_unmounted(SDCARD_ROOT); // umount, if pull card and then insert card
+            ensure_path_mounted(SDCARD_ROOT);
+            update_package = browse_directory(SDCARD_ROOT, device);
+            if (update_package == NULL) {
+                ui->Print("\n-- No package file selected.\n", update_package);
+                break;
+            }
+            found_upgrade = 1;
+            break;
+
+        case 2:
+            ensure_path_mounted(CACHE_ROOT);
+            ensure_path_unmounted(UDISK_ROOT);
+            ensure_path_mounted(UDISK_ROOT);
+            update_package = browse_directory(UDISK_ROOT, device);
+            if (update_package == NULL) {
+                ui->Print("\n-- No package file selected.\n", update_package);
+                break;
+            }
+            found_upgrade = 2;
+            break;
+    }
+
+    if (!found_upgrade) return 1;
+
+    ui->Print("\n-- Install %s ...\n", update_package);
+    set_sdcard_update_bootloader_message();
+    instaboot_disable();
+    instaboot_clear();
+    status = install_package(update_package, &wipe_cache, TEMPORARY_INSTALL_FILE, true, 0);
+
+    if (status == INSTALL_SUCCESS && wipe_cache) {
+        ui->Print("\n-- Wiping cache (at package request)...\n");
+        if (erase_volume("/cache")) {
+            ui->Print("Cache wipe failed.\n");
+        } else {
+            ui->Print("Cache wipe complete.\n");
+        }
+    }
+
+    if (status >= 0) {
+        if (status != INSTALL_SUCCESS) {
+            ui->SetBackground(RecoveryUI::ERROR);
+            ui->Print("Installation aborted.\n");
+        } else if (!ui->IsTextVisible()) {
+            return 0;   // reboot if logs aren't visible
+        } else {
+            ui->Print("\nInstall from %s complete.\n",
+                (found_upgrade == 1) ? "sdcard" : "udisk");
+        }
+    }
+
+    return 1;
+}
+
 
 static void run_graphics_test(Device* device) {
     // Switch to graphics screen.
@@ -1167,8 +1253,11 @@ prompt_and_wait(Device* device, int status) {
                 if (!ui->IsTextVisible()) return Device::NO_ACTION;
                 break;
 
+            case Device::APPLY_EXT:
+                ext_update(device, should_wipe_cache);
+                break;
+
             case Device::APPLY_ADB_SIDELOAD:
-            case Device::APPLY_SDCARD:
                 {
                     bool adb = (chosen_action == Device::APPLY_ADB_SIDELOAD);
                     if (adb) {
@@ -1549,6 +1638,8 @@ int main(int argc, char **argv) {
     int status = INSTALL_SUCCESS;
 
     if (update_package != NULL) {
+        instaboot_disable();
+        instaboot_clear();
         // It's not entirely true that we will modify the flash. But we want
         // to log the update attempt since update_package is non-NULL.
         modified_flash = true;

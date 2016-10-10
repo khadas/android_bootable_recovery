@@ -20,7 +20,7 @@ static const char* MENU_ITEMS[] = {
     "Reboot system now",
     "Reboot to bootloader",
     "Apply update from ADB",
-    "Apply update from SD card",
+    "Apply update from EXT",
     "Wipe data/factory reset",
     "Wipe cache partition",
     "Mount /system",
@@ -39,7 +39,7 @@ Device::BuiltinAction Device::InvokeMenuItem(int menu_position) {
     case 0: return REBOOT;
     case 1: return REBOOT_BOOTLOADER;
     case 2: return APPLY_ADB_SIDELOAD;
-    case 3: return APPLY_SDCARD;
+    case 3: return APPLY_EXT;
     case 4: return WIPE_DATA;
     case 5: return WIPE_CACHE;
     case 6: return MOUNT_SYSTEM;
