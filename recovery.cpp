@@ -1723,16 +1723,6 @@ int main(int argc, char **argv) {
         if (sideload_auto_reboot) {
             ui->Print("Rebooting automatically.\n");
         }
-    } else if (!just_exit) {
-        status = INSTALL_NONE;  // No command specified
-        ui->SetBackground(RecoveryUI::NO_COMMAND);
-
-        // http://b/17489952
-        // If this is an eng or userdebug build, automatically turn on the
-        // text display if no command is specified.
-        if (is_ro_debuggable()) {
-            ui->ShowText(true);
-        }
     }
 
     if (!sideload_auto_reboot && (status == INSTALL_ERROR || status == INSTALL_CORRUPT)) {
@@ -1741,7 +1731,9 @@ int main(int argc, char **argv) {
     }
 
     Device::BuiltinAction after = shutdown_after ? Device::SHUTDOWN : Device::REBOOT;
-    if ((status != INSTALL_SUCCESS && status != INSTALL_SKIPPED && !sideload_auto_reboot) ||
+    if (just_exit) {
+        after = Device::REBOOT;
+    } else if ((status != INSTALL_SUCCESS && status != INSTALL_SKIPPED && !sideload_auto_reboot) ||
             ui->IsTextVisible()) {
         Device::BuiltinAction temp = prompt_and_wait(device, status);
         if (temp != Device::NO_ACTION) {
