@@ -56,6 +56,7 @@
 #include "updater.h"
 extern "C" {
 #include "ubootenv/uboot_env.h"
+#include "check/dtbcheck.h"
 }
 #include "install.h"
 #include "tune2fs.h"
@@ -64,8 +65,6 @@ extern "C" {
 #include "make_ext4fs.h"
 #include "wipe.h"
 #endif
-
-unsigned int recovery_size1 = 32*1024*1024; //default value 32M
 
 #define ARRAY_SIZE(x)  sizeof(x)/sizeof(x[0])
 #define EMMC_USER_PARTITION        "bootloader"
@@ -90,7 +89,10 @@ static const char *sEmmcPartionName[] = {
     EMMC_BLK1BOOT0_PARTITION,
     EMMC_BLK1BOOT1_PARTITION,
 };
-
+extern "C" {
+int RecoverySecureCheck(const ZipArchive zipArchive);
+int RecoveryDtbCheck(const ZipArchive zipArchive);
+}
 /*
  * return value: 0 if no error; 1 if path not existed, -1 if access failed
  *
@@ -2171,6 +2173,33 @@ Value* Tune2FsFn(const char* name, State* state, int argc, Expr* argv[]) {
     return StringValue(strdup("t"));
 }
 
+Value* OtaZipCheck(const char* name, State* state, int argc, Expr* argv[]) {
+
+    int check = 0;
+    UpdaterInfo* ui = (UpdaterInfo*)(state->cookie);
+    ZipArchive* za = ((UpdaterInfo*)(state->cookie))->package_zip;
+
+    printf("\n-- Secure Check...\n");
+
+    check = RecoverySecureCheck(*za);
+    if (check <= 0) {
+        return ErrorAbort(state, "Secure check failed. %s\n\n", !check ? "(Not match)" : "");
+    } else if (check == 1) {
+        printf("Secure check complete.\n\n");
+    }
+#ifndef RECOVERY_DISABLE_DTB_CHECK
+    printf("\n-- Dtb Check...\n");
+
+    check = RecoveryDtbCheck(*za);
+    if (check != 0) {
+        return ErrorAbort(state, "Dtb check failed. %s\n\n", !check ? "(Not match)" : "");
+    } else {
+        printf("dtb check complete.\n\n");
+    }
+#endif
+    return StringValue(strdup("1"));
+}
+
 void RegisterInstallFunctions() {
     RegisterFunction("mount", MountFn);
     RegisterFunction("is_mounted", IsMountedFn);
@@ -2225,4 +2254,5 @@ void RegisterInstallFunctions() {
 
     RegisterFunction("set_bootloader_env", SetBootloaderEnvFn);
     RegisterFunction("tune2fs", Tune2FsFn);
+    RegisterFunction("ota_zip_check", OtaZipCheck);
 }
