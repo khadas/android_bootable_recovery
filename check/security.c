@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mount.h>
+#include <string.h>
 
 #include "common.h"
 #include "minzip/SysUtil.h"

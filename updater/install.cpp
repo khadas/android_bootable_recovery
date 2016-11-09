@@ -72,6 +72,7 @@ extern "C" {
 #define EMMC_BLK0BOOT1_PARTITION   "mmcblk0boot1"
 #define EMMC_BLK1BOOT0_PARTITION   "mmcblk1boot0"
 #define EMMC_BLK1BOOT1_PARTITION   "mmcblk1boot1"
+#define COMMAND_FILE "/cache/recovery/command"
 
 enum emmcPartition {
     USER = 0,
@@ -1704,6 +1705,66 @@ done:
     return StringValue(result);
 }
 
+int WriteDtbData(const ZipArchive* zipArchive)
+{
+    bool success = false;
+    int ret = -1;
+    const char *DTB_DEV=  "/dev/dtb";
+    // write 256K dtb datas to dtb device maximum,kernel limit
+    const int DTB_DATA_MAX =  256*1024;
+    ssize_t wrote;
+
+    Value* v = reinterpret_cast<Value*>(malloc(sizeof(Value)));
+    v->type = VAL_BLOB;
+    v->size = -1;
+    v->data = NULL;
+
+    const ZipEntry* entry = mzFindZipEntry(zipArchive, "dtb.img");
+    if (entry == NULL) {
+        printf("no dtb.img in package\n");
+        goto done;
+    }
+
+    v->size = mzGetZipEntryUncompLen(entry);
+    if (v->size > DTB_DATA_MAX) {
+        fprintf(stderr, "data size(%d) out of range size(max:%d)\n",
+            v->size, DTB_DATA_MAX);
+        goto done;
+    }
+    v->data = reinterpret_cast<char*>(malloc(v->size));
+    if (v->data == NULL) {
+        printf("failed to allocate %ld bytes for dtb.img \n",(long)v->size);
+        goto done;
+    }
+
+    success = mzExtractZipEntryToBuffer(zipArchive, entry,
+                                            (unsigned char *)v->data);
+
+    printf("\nstart to write dtb.img to %s...\n", DTB_DEV);
+    wrote = write_chrdev_data(DTB_DEV, v->data, v->size);
+    success = (wrote == v->size);
+
+    if (!success) {
+        fprintf(stderr, "write_data to %s failed (%s)\n",
+            DTB_DEV, strerror(errno));
+        ret = -1;
+    } else {
+        printf("write_data to %s successful\n",
+            DTB_DEV);
+        ret = 0;
+    }
+
+done:
+    if (v->data != NULL) {
+        free(v->data);
+        v->data = NULL;
+        v->size = -1;
+    }
+    FreeValue(v);
+    return ret;
+}
+
+
 
 // apply_patch_space(bytes)
 Value* ApplyPatchSpaceFn(const char* name, State* state,
@@ -2016,6 +2077,31 @@ Value* RebootNowFn(const char* name, State* state, int argc, Expr* argv[]) {
     return NULL;
 }
 
+int RebootToRecovery(const char* package_filename) {
+    char command[768];
+    printf("RebootToRecovery \n");
+    memset(command, 0, sizeof(command));
+    FILE *fp = fopen(COMMAND_FILE, "w");
+    strcpy(command,"--update_package=");
+    strcat(command,package_filename);
+
+    printf("command: %s \n",command);
+    if (fp != NULL) {
+        fwrite(command, 1, strlen(command), fp);
+        fflush(fp);
+        fsync(fileno(fp));
+        if (ferror(fp)) printf("Error in write command file \n(%s)\n",strerror(errno));
+        fclose(fp);
+    }
+
+    property_set(ANDROID_RB_PROPERTY, "reboot,recovery");
+
+    sleep(5);
+    printf("failed to reboot\n");
+    return -1;
+}
+
+
 // Store a string value somewhere that future invocations of recovery
 // can access it.  This value is called the "stage" and can be used to
 // drive packages that need to do reboots in the middle of
@@ -2192,6 +2278,13 @@ Value* OtaZipCheck(const char* name, State* state, int argc, Expr* argv[]) {
 
     check = RecoveryDtbCheck(*za);
     if (check != 0) {
+        if (check == 2) {
+            check = WriteDtbData(za);
+            if (check ==0) {
+                printf("error code = %d \n",kDtbCheckFailure);
+                return ErrorAbort(state, kDtbCheckFailure, "Dtb has changed, update dtb.img only success. %s\n\n", !check ? "(Not match)" : "");
+            }
+        }
         return ErrorAbort(state, "Dtb check failed. %s\n\n", !check ? "(Not match)" : "");
     } else {
         printf("dtb check complete.\n\n");

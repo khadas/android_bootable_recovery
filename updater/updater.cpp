@@ -186,6 +186,12 @@ int main(int argc, char** argv) {
             }
         }
 
+        if (state.cause_code == kDtbCheckFailure) {
+            printf("dtb has changed, update dtb.img only ok\n");
+            fprintf(cmd_pipe, "retry_update\n");
+            RebootToRecovery(package_filename);
+        }
+
         free(state.errmsg);
         return 7;
     } else {

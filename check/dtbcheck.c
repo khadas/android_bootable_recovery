@@ -30,6 +30,9 @@
 
 #define ENV_DTB            "aml_dt"
 #define CMDLINE            "/proc/cmdline"
+#define STORE_DEVICE       "/sys/class/aml_store/store_device"
+#define DEVICE_NAND        2
+#define DEVICE_EMMC        1
 
 extern int IsPlatformEncrypted(void);
 
@@ -63,6 +66,34 @@ struct Dtb_header {
 unsigned int
 STRTOU32(unsigned char* p){
     return (p[3]<<24)|(p[2]<<16)|(p[1]<<8)|p[0];
+}
+
+int GetDeviceType()
+{
+    FILE *p = NULL;
+    int len = 0;
+    char buffer[32] = {0};
+    int type = 0;
+
+    p = fopen(STORE_DEVICE, "r");
+    if (p == NULL) {
+        printf("open failed!\n");
+        return -1;
+    }
+
+    len = fread(buffer, 1, 32, p);
+    if (len <= 0) {
+        printf("fread failed!\n");
+        fclose(p);
+        return -1;
+    }
+    fclose(p);
+
+    printf("buffer:%s\n",buffer);
+
+    type = atoi(buffer);
+    printf("type=%d\n",type);
+    return type;
 }
 
 signed int
@@ -599,6 +630,11 @@ RecoveryDtbCheck(const ZipArchive zipArchive){
     int partition_num_zip = 0;
     int partition_num_dev = 0;
     int imageSize = 0;
+    int recovery_dev = 0, recovery_zip = 0;
+    int data_dev = 0, data_zip = 0;
+    int recovery_offset_dev = 0, recovery_offset_zip = 0;
+    int data_offset_dev = 0, data_offset_zip = 0;
+    int device_type = 0;
 
     isEncrypted = IsPlatformEncrypted();
     if (isEncrypted == 2) {
@@ -648,28 +684,64 @@ RecoveryDtbCheck(const ZipArchive zipArchive){
         goto END;
     }
 
+    device_type = GetDeviceType();
+    printf("device_type = %d \n",device_type);
+
     for (i=0; i<partition_num_dev;i++) {
         printf("%s:0x%08x\n", dtb_zip[i].partition_name, dtb_zip[i].partition_size);
         printf("%s:0x%08x\n", dtb_dev[i].partition_name, dtb_dev[i].partition_size);
 
         if (!strcmp("recovery", dtb_dev[i].partition_name)) {
             recovery_size1 = dtb_zip[i].partition_size;
+            recovery_dev = i;
+        }
+        if (!strcmp("recovery", dtb_zip[i].partition_name)) {
+            recovery_zip = i;
+        }
+
+        if (!strcmp("data", dtb_dev[i].partition_name)) {
+            data_dev= i;
+        }
+        if (!strcmp("data", dtb_zip[i].partition_name)) {
+            data_zip = i;
         }
 
         if ((strcmp(dtb_zip[i].partition_name, dtb_dev[i].partition_name) != 0)||
-                (dtb_zip[i].partition_size != dtb_dev[i].partition_size))
-        {
-            break;
+                (dtb_zip[i].partition_size != dtb_dev[i].partition_size)) {
+            ret = 2;
+            /*just emmc support partition changes*/
+            if (device_type == DEVICE_NAND) {
+                printf("the partitions changed & device is nand! can not upgrade!\n ");
+                ret = -1;
+                goto END;
+            }
         }
     }
 
-    if (i<partition_num_dev) {
+    /*the offset of recovery/data cannot be changed*/
+    for (i=0;i<recovery_dev;i++) {
+        recovery_offset_dev += dtb_dev[i].partition_size;
+    }
+    for (i=0;i<recovery_zip;i++) {
+        recovery_offset_zip += dtb_zip[i].partition_size;
+    }
+    for (i=0;i<data_dev;i++) {
+        data_offset_dev += dtb_dev[i].partition_size;
+    }
+    for (i=0;i<data_zip;i++) {
+        data_offset_zip += dtb_zip[i].partition_size;
+    }
+
+    printf("recovery_dev: %d  recovery_offset_dev :0x%08x\n", recovery_dev, recovery_offset_dev);
+    printf("recovery_zip: %d  recovery_offset_zip :0x%08x\n", recovery_zip, recovery_offset_zip);
+    printf("data_dev: %d  data_offset_dev :0x%08x\n", data_dev, data_offset_dev);
+    printf("data_zip: %d  data_offset_zip :0x%08x\n", data_zip, data_offset_zip);
+
+    if ((recovery_offset_dev != recovery_offset_zip) || (data_offset_dev != data_offset_zip)) {
         printf("dtb check the partitions not match! can not upgrade!\n ");
         ret = -1;
         goto END;
     }
-
-    ret = 0;
 
 END:
      if (s_pDtbBuffer != NULL)
