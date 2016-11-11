@@ -17,7 +17,9 @@ LOCAL_PATH := $(call my-dir)
 updater_src_files := \
 	install.cpp \
 	blockimg.cpp \
-	updater.cpp
+	updater.cpp \
+	../bootloader.cpp \
+	../roots.cpp
 
 #
 # Build a statically-linked binary to include in OTA packages
@@ -44,9 +46,17 @@ LOCAL_STATIC_LIBRARIES += \
     libz
 endif
 
+LOCAL_C_INCLUDES += \
+    system/vold \
+    system/extras/ext4_utils \
+    system/core/adb \
+    system/core/fs_mgr/include
+
+LOCAL_CFLAGS += -DUPDATER_USE
+
 LOCAL_STATIC_LIBRARIES += $(TARGET_RECOVERY_UPDATER_LIBS) $(TARGET_RECOVERY_UPDATER_EXTRA_LIBS)
 LOCAL_STATIC_LIBRARIES += libenv libsystemcontrol_static libapplypatch libbase libotafault libedify libmtdutils libminzip libz
-LOCAL_STATIC_LIBRARIES += libbz libsecurity libfdt
+LOCAL_STATIC_LIBRARIES += libbz libsecurity libfdt libfs_mgr
 LOCAL_STATIC_LIBRARIES += libcutils liblog libc
 LOCAL_STATIC_LIBRARIES += libselinux
 tune2fs_static_libraries := \

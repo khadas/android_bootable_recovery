@@ -33,5 +33,6 @@ typedef struct {
 } UpdaterInfo;
 
 extern struct selabel_handle *sehandle;
+extern int wipe_flag;
 
 #endif

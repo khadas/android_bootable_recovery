@@ -60,6 +60,8 @@ extern "C" {
 }
 #include "install.h"
 #include "tune2fs.h"
+#include "roots.h"
+
 
 #ifdef USE_EXT4
 #include "make_ext4fs.h"
@@ -2077,22 +2079,25 @@ Value* RebootNowFn(const char* name, State* state, int argc, Expr* argv[]) {
     return NULL;
 }
 
-int RebootToRecovery(const char* package_filename) {
-    char command[768];
+int RebootToRecovery(const char* package_filename, int wipe_flag) {
+    struct bootloader_message boot {};
     printf("RebootToRecovery \n");
-    memset(command, 0, sizeof(command));
-    FILE *fp = fopen(COMMAND_FILE, "w");
-    strcpy(command,"--update_package=");
-    strcat(command,package_filename);
+    printf("wipe_flag = %d\n",wipe_flag);
+    strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
+    strlcpy(boot.recovery, "recovery\n", sizeof(boot.recovery));
 
-    printf("command: %s \n",command);
-    if (fp != NULL) {
-        fwrite(command, 1, strlen(command), fp);
-        fflush(fp);
-        fsync(fileno(fp));
-        if (ferror(fp)) printf("Error in write command file \n(%s)\n",strerror(errno));
-        fclose(fp);
+    strlcat(boot.recovery, "--update_package=", sizeof(boot.recovery));
+    strlcat(boot.recovery, package_filename, sizeof(boot.recovery));
+    strlcat(boot.recovery, "\n", sizeof(boot.recovery));
+
+    if (wipe_flag == 1) {
+        strlcat(boot.recovery, "--wipe_data\n", sizeof(boot.recovery));
+        strlcat(boot.recovery, "--wipe_cache\n", sizeof(boot.recovery));
     }
+
+    load_volume_table();
+
+    set_bootloader_message(&boot);
 
     property_set(ANDROID_RB_PROPERTY, "reboot,recovery");
 
@@ -2100,7 +2105,6 @@ int RebootToRecovery(const char* package_filename) {
     printf("failed to reboot\n");
     return -1;
 }
-
 
 // Store a string value somewhere that future invocations of recovery
 // can access it.  This value is called the "stage" and can be used to
@@ -2262,6 +2266,7 @@ Value* Tune2FsFn(const char* name, State* state, int argc, Expr* argv[]) {
 Value* OtaZipCheck(const char* name, State* state, int argc, Expr* argv[]) {
 
     int check = 0;
+    int ret = 0;
     UpdaterInfo* ui = (UpdaterInfo*)(state->cookie);
     ZipArchive* za = ((UpdaterInfo*)(state->cookie))->package_zip;
 
@@ -2278,11 +2283,13 @@ Value* OtaZipCheck(const char* name, State* state, int argc, Expr* argv[]) {
 
     check = RecoveryDtbCheck(*za);
     if (check != 0) {
-        if (check == 2) {
-            check = WriteDtbData(za);
-            if (check ==0) {
+        if ((check == 2) || (check == 3)) {
+            if (check == 3)
+                wipe_flag = 1;
+            ret = WriteDtbData(za);
+            if (ret ==0) {
                 printf("error code = %d \n",kDtbCheckFailure);
-                return ErrorAbort(state, kDtbCheckFailure, "Dtb has changed, update dtb.img only success. %s\n\n", !check ? "(Not match)" : "");
+                return ErrorAbort(state, kDtbCheckFailure, "Dtb has changed, update dtb.img only success. \n");
             }
         }
         return ErrorAbort(state, "Dtb check failed. %s\n\n", !check ? "(Not match)" : "");

@@ -18,7 +18,7 @@
 #define _UPDATER_INSTALL_H_
 
 void RegisterInstallFunctions();
-int RebootToRecovery(const char* package_filename);
+int RebootToRecovery(const char* package_filename, int wipe_flag);
 
 
 // uiPrintf function prints msg to screen as well as logs

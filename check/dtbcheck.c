@@ -737,7 +737,12 @@ RecoveryDtbCheck(const ZipArchive zipArchive){
     printf("data_dev: %d  data_offset_dev :0x%08x\n", data_dev, data_offset_dev);
     printf("data_zip: %d  data_offset_zip :0x%08x\n", data_zip, data_offset_zip);
 
-    if ((recovery_offset_dev != recovery_offset_zip) || (data_offset_dev != data_offset_zip)) {
+    if (data_offset_dev != data_offset_zip) {
+        printf("data changed, need wipe_data\n ");
+        ret = 3;
+    }
+
+    if (recovery_offset_dev != recovery_offset_zip) {
         printf("dtb check the partitions not match! can not upgrade!\n ");
         ret = -1;
         goto END;
