@@ -2097,7 +2097,7 @@ int RebootToRecovery(const char* package_filename, int wipe_flag) {
 
     load_volume_table();
 
-    set_bootloader_message(&boot);
+    //set_bootloader_message(&boot);
 
     property_set(ANDROID_RB_PROPERTY, "reboot,recovery");
 

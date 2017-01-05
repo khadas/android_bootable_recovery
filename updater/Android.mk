@@ -18,7 +18,6 @@ updater_src_files := \
 	install.cpp \
 	blockimg.cpp \
 	updater.cpp \
-	../bootloader.cpp \
 	../roots.cpp
 
 #
