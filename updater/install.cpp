@@ -1207,6 +1207,126 @@ static int write_data(int ctx, const char *data, ssize_t len)
     return wrote;
 }
 
+
+//return value
+// -1  :   failed
+//  0   :   success
+static int backup_partition_data(const char *name,const char *dir, long offset) {
+    int ret = 0;
+    int sor_fd = -1;
+    int dst_fd = -1;
+    ssize_t wrote = 0;
+    ssize_t readed = 0;
+    char devpath[128] = {0};
+    char dstpath[128] = {0};
+    const int BUFFER_MAX =  32*1024*1024;   //Max support 32*M
+    printf("backup partition name:%s, to dir:%s\n", name, dir);
+
+    if ((name == NULL) || (dir == NULL)) {
+        fprintf(stderr, "name(%s) or dir(%s) is NULL!\n", name, dir);
+        return -1;
+    }
+
+    if (!strcmp(name, "dtb")) {//dtb is char device
+        sprintf(devpath, "/dev/%s", name);
+    } else {
+        sprintf(devpath, "/dev/block/%s", name);
+    }
+
+    sprintf(dstpath, "%s%s.img", dir, name);
+
+    sor_fd = open(devpath, O_RDONLY);
+    if (sor_fd < 0) {
+        fprintf(stderr, "open %s failed (%s)\n",devpath, strerror(errno));
+        return -1;
+    }
+
+    dst_fd = open(dstpath, O_WRONLY | O_CREAT, 00777);
+    if (dst_fd < 0) {
+        fprintf(stderr, "open %s failed (%s)\n",dstpath, strerror(errno));
+        return -1;
+    }
+
+    char* buffer = (char *)malloc(BUFFER_MAX);
+    if (buffer == NULL) {
+        fprintf(stderr, "can't malloc %d buffer!\n", BUFFER_MAX);
+        goto err_out;
+    }
+
+    if (strcmp(name, "dtb")) {
+        lseek(sor_fd, offset, SEEK_SET);
+    }
+
+    readed = read(sor_fd, buffer, BUFFER_MAX);
+    if (readed <= 0) {
+        fprintf(stderr, "read failed read:%d!\n", readed);
+        goto err_out;
+    }
+
+    wrote = write(dst_fd, buffer, readed);
+    if (wrote != readed) {
+        fprintf(stderr, "write %s failed (%s)\n",dstpath, strerror(errno));
+        goto err_out;
+    }
+
+    close(dst_fd);
+    close(sor_fd);
+    free(buffer);
+    buffer == NULL;
+
+    //umount /cache and do fsync for data save
+    ret = umount("/cache");
+    if (ret != 0) {
+        fprintf(stderr, "umount cache failed (%s)\n",dstpath, strerror(errno));
+    }
+
+    int fd = 0;
+    fd = open("/dev/block/cache", O_RDWR);
+    if (fd < 0) {
+        fprintf(stderr, "open %s failed (%s)\n","/dev/block/cache", strerror(errno));
+        return -1;
+    }
+
+    FILE *fp = NULL;
+    fp = fdopen(fd, "r+");
+    if (fp == NULL) {
+        printf("fdopen failed!\n");
+        close(fd);
+        return -1;
+    }
+
+    fflush(fp);
+    fsync(fd);
+    fclose(fp);
+
+    ret = mount("/dev/block/cache", "/cache", "ext4",\
+        MS_NOATIME | MS_NODEV | MS_NODIRATIME,"discard");
+    if (ret < 0 ) {
+        fprintf(stderr, "mount cache failed (%s)\n","/dev/block/cache", strerror(errno));
+    }
+
+    return 0;
+
+
+err_out:
+    if (sor_fd > 0) {
+        close(sor_fd);
+    }
+
+    if (dst_fd > 0) {
+        close(dst_fd);
+    }
+
+    if (buffer) {
+        free(buffer);
+        buffer == NULL;
+    }
+
+    return -1;
+
+}
+
+
 static int write_chrdev_data(
     const char *dev, const char *data, ssize_t size)
 {
@@ -1610,6 +1730,8 @@ Value* WriteRawImageFn(const char* name, State* state, int argc, Expr* argv[]) {
             }
         } else { // write other image
             if (!strncmp(partition, "recovery", strlen("recovery"))) {
+                //backup /dev/block/recovery to /cache/recovery/recovery.img
+                backup_partition_data("recovery", "/cache/recovery/", 0);
                 #ifndef RECOVERY_BACKUP_RECOVERY
                  result = block_write_data(contents, partition, 0);
                 #else
@@ -1637,6 +1759,9 @@ Value* WriteDtbImageFn(const char* name, State* state, int argc, Expr* argv[]) {
             name, strerror(errno));
         return NULL;
     }
+
+    //backup /dev/dtb to /cache/recovery/dtb.img
+    backup_partition_data("dtb", "/cache/recovery/", 0);
 
     const char *DTB_DEV=  "/dev/dtb";
     // write 256K dtb datas to dtb device maximum,kernel limit
@@ -2215,6 +2340,18 @@ Value* SetBootloaderEnvFn(const char* name, State* state, int argc, Expr* argv[]
     if (strlen(env_val) == 0) {
         ErrorAbort(state, "env_val argument to %s() can't be empty", name);
         goto done;
+    }
+
+    //rm backup dtb.img and recovery.img
+    if ((!strcmp(env_val, "1")) || (!strcmp(env_val, "2"))) {
+        struct stat st;
+        if (stat("/cache/recovery/dtb.img", &st) == 0) {
+            unlink("/cache/recovery/dtb.img");
+        }
+
+         if (stat("/cache/recovery/recovery.img", &st) == 0) {
+            unlink("/cache/recovery/recovery.img");
+        }
     }
 
     ret = set_bootloader_env(env_name, env_val);
