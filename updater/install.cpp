@@ -1213,6 +1213,8 @@ static int write_data(int ctx, const char *data, ssize_t len)
 //  0   :   success
 static int backup_partition_data(const char *name,const char *dir, long offset) {
     int ret = 0;
+    int fd = 0;
+    FILE *fp = NULL;
     int sor_fd = -1;
     int dst_fd = -1;
     ssize_t wrote = 0;
@@ -1280,14 +1282,12 @@ static int backup_partition_data(const char *name,const char *dir, long offset) 
         fprintf(stderr, "umount cache failed (%s)\n",dstpath, strerror(errno));
     }
 
-    int fd = 0;
     fd = open("/dev/block/cache", O_RDWR);
     if (fd < 0) {
         fprintf(stderr, "open %s failed (%s)\n","/dev/block/cache", strerror(errno));
         return -1;
     }
 
-    FILE *fp = NULL;
     fp = fdopen(fd, "r+");
     if (fp == NULL) {
         printf("fdopen failed!\n");
