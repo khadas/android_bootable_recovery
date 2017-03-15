@@ -61,6 +61,8 @@ extern "C" {
 #include "install.h"
 #include "tune2fs.h"
 #include "roots.h"
+#include <bootloader_message/bootloader_message.h>
+#include <fs_mgr.h>
 
 
 #ifdef USE_EXT4
@@ -75,6 +77,8 @@ extern "C" {
 #define EMMC_BLK1BOOT0_PARTITION   "mmcblk1boot0"
 #define EMMC_BLK1BOOT1_PARTITION   "mmcblk1boot1"
 #define COMMAND_FILE "/cache/recovery/command"
+#define CACHE_ROOT "/cache"
+
 
 enum emmcPartition {
     USER = 0,
@@ -1891,6 +1895,57 @@ done:
     return ret;
 }
 
+int WriteRecoveryData(const ZipArchive* zipArchive)
+{
+    bool success = false;
+    int ret = -1;
+    const char *RECOVERY_DEV=  "/dev/block/recovery";
+    ssize_t wrote;
+
+    Value* v = reinterpret_cast<Value*>(malloc(sizeof(Value)));
+    v->type = VAL_BLOB;
+    v->size = -1;
+    v->data = NULL;
+
+    const ZipEntry* entry = mzFindZipEntry(zipArchive, "recovery.img");
+    if (entry == NULL) {
+        printf("no recovery.img in package\n");
+        goto done;
+    }
+
+    v->size = mzGetZipEntryUncompLen(entry);
+    v->data = reinterpret_cast<char*>(malloc(v->size));
+    if (v->data == NULL) {
+        printf("failed to allocate %ld bytes for recovery.img \n",(long)v->size);
+        goto done;
+    }
+
+    success = mzExtractZipEntryToBuffer(zipArchive, entry,
+                                            (unsigned char *)v->data);
+
+    printf("\nstart to write recovery.img to %s...\n", RECOVERY_DEV);
+    wrote = write_chrdev_data(RECOVERY_DEV, v->data, v->size);
+    success = (wrote == v->size);
+
+    if (!success) {
+        fprintf(stderr, "write_data to %s failed (%s)\n",
+            RECOVERY_DEV, strerror(errno));
+        ret = -1;
+    } else {
+        printf("write_data to %s successful\n",
+            RECOVERY_DEV);
+        ret = 0;
+    }
+
+done:
+    if (v->data != NULL) {
+        free(v->data);
+        v->data = NULL;
+        v->size = -1;
+    }
+    FreeValue(v);
+    return ret;
+}
 
 
 // apply_patch_space(bytes)
@@ -2206,6 +2261,7 @@ Value* RebootNowFn(const char* name, State* state, int argc, Expr* argv[]) {
 
 int RebootToRecovery(const char* package_filename, int wipe_flag) {
     struct bootloader_message boot {};
+    std::string err;
     printf("RebootToRecovery \n");
     printf("wipe_flag = %d\n",wipe_flag);
     strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
@@ -2222,7 +2278,30 @@ int RebootToRecovery(const char* package_filename, int wipe_flag) {
 
     load_volume_table();
 
-    //set_bootloader_message(&boot);
+    printf("write_bootloader_message \n");
+    if (!write_bootloader_message(boot, &err)) {
+        printf("%s\n", err.c_str());
+        char buffer[1024];
+        if (ensure_path_mounted(COMMAND_FILE) != 0) {
+            printf("Can't mount %s\n", COMMAND_FILE);
+            return -1;
+        }
+        FILE *fp = fopen(COMMAND_FILE, "w");
+
+        strcpy(buffer, "--update_package=");
+        strcat(buffer, package_filename);
+        strcat(buffer, "\n");
+        if (wipe_flag == 1) {
+            strcat(buffer, "--wipe_data\n");
+            strcat(buffer, "--wipe_cache\n");
+        }
+
+        if (fp) {
+            fwrite(buffer, sizeof(buffer), 1, fp);
+            fclose(fp);
+        }
+        ensure_path_unmounted(CACHE_ROOT);
+    }
 
     property_set(ANDROID_RB_PROPERTY, "reboot,recovery");
 
@@ -2424,6 +2503,7 @@ Value* OtaZipCheck(const char* name, State* state, int argc, Expr* argv[]) {
             if (check == 3)
                 wipe_flag = 1;
             ret = WriteDtbData(za);
+            ret = WriteRecoveryData(za);
             if (ret ==0) {
                 printf("error code = %d \n",kDtbCheckFailure);
                 return ErrorAbort(state, kDtbCheckFailure, "Dtb has changed, update dtb.img only success. \n");

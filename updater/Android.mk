@@ -56,7 +56,7 @@ LOCAL_CFLAGS += -DUPDATER_USE
 LOCAL_STATIC_LIBRARIES += $(TARGET_RECOVERY_UPDATER_LIBS) $(TARGET_RECOVERY_UPDATER_EXTRA_LIBS)
 LOCAL_STATIC_LIBRARIES += libenv libsystemcontrol_static libapplypatch libbase libotafault libedify libmtdutils libminzip libz
 LOCAL_STATIC_LIBRARIES += libbz libsecurity libfdt libfs_mgr
-LOCAL_STATIC_LIBRARIES += libcutils liblog libc
+LOCAL_STATIC_LIBRARIES += libcutils liblog libc libbootloader_message libbase
 LOCAL_STATIC_LIBRARIES += libselinux
 tune2fs_static_libraries := \
  libext2_com_err \
