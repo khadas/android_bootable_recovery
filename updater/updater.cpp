@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
         }
 
         if (state.cause_code == kDtbCheckFailure) {
-            printf("dtb has changed, update dtb.img only ok\n");
+            printf("dtb has changed, update dtb.img & recovery.img only ok\n");
             fprintf(cmd_pipe, "retry_update\n");
             RebootToRecovery(package_filename, wipe_flag);
         }

@@ -2274,6 +2274,8 @@ int RebootToRecovery(const char* package_filename, int wipe_flag) {
     if (wipe_flag == 1) {
         strlcat(boot.recovery, "--wipe_data\n", sizeof(boot.recovery));
         strlcat(boot.recovery, "--wipe_cache\n", sizeof(boot.recovery));
+    }else if (wipe_flag == 2) {
+        strlcat(boot.recovery, "--wipe_cache\n", sizeof(boot.recovery));
     }
 
     load_volume_table();
@@ -2293,6 +2295,8 @@ int RebootToRecovery(const char* package_filename, int wipe_flag) {
         strcat(buffer, "\n");
         if (wipe_flag == 1) {
             strcat(buffer, "--wipe_data\n");
+            strcat(buffer, "--wipe_cache\n");
+        }else if (wipe_flag == 2) {
             strcat(buffer, "--wipe_cache\n");
         }
 
@@ -2499,14 +2503,16 @@ Value* OtaZipCheck(const char* name, State* state, int argc, Expr* argv[]) {
 
     check = RecoveryDtbCheck(*za);
     if (check != 0) {
-        if ((check == 2) || (check == 3)) {
+        if (check > 1) {
             if (check == 3)
                 wipe_flag = 1;
+            if (check == 4)
+                wipe_flag = 2;
             ret = WriteDtbData(za);
             ret = WriteRecoveryData(za);
             if (ret ==0) {
                 printf("error code = %d \n",kDtbCheckFailure);
-                return ErrorAbort(state, kDtbCheckFailure, "Dtb has changed, update dtb.img only success. \n");
+                return ErrorAbort(state, kDtbCheckFailure, "Dtb has changed, update dtb.img & recovery.img only success. \n");
             }
         }
         return ErrorAbort(state, "Dtb check failed. %s\n\n", !check ? "(Not match)" : "");

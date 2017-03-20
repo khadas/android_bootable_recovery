@@ -635,6 +635,10 @@ RecoveryDtbCheck(const ZipArchive zipArchive){
     int recovery_offset_dev = 0, recovery_offset_zip = 0;
     int data_offset_dev = 0, data_offset_zip = 0;
     int device_type = 0;
+    int partition_num;
+    int cache_offset_dev = 0, cache_offset_zip = 0;
+    int recovery_size_dev = 0, recovery_size_zip = 0;
+    int cache_size_dev = 0, cache_size_zip = 0;
 
     isEncrypted = IsPlatformEncrypted();
     if (isEncrypted == 2) {
@@ -678,32 +682,54 @@ RecoveryDtbCheck(const ZipArchive zipArchive){
         goto END;
     }
 
-    if (partition_num_zip != partition_num_dev) {
-        printf("partition num don't match zip:%d, dev:%d\n",partition_num_zip,  partition_num_dev);
-        ret = -1;
-        goto END;
-    }
-
+    partition_num = partition_num_dev;
     device_type = GetDeviceType();
     printf("device_type = %d \n",device_type);
 
-    for (i=0; i<partition_num_dev;i++) {
+    if (partition_num_zip != partition_num_dev) {
+        printf("partition num don't match zip:%d, dev:%d\n",partition_num_zip,  partition_num_dev);
+        if (device_type == DEVICE_NAND) {
+            printf("the partitions changed & device is nand! can not upgrade!\n ");
+            ret = -1;
+            goto END;
+        }
+        #ifdef SUPPORT_PARTNUM_CHANGE
+        ret = 2;
+        partition_num = partition_num_zip > partition_num_dev ? partition_num_zip : partition_num_dev;
+        #else
+        printf("partition num don't match zip:%d, dev:%d, can not upgrade!\n",partition_num_zip,  partition_num_dev);
+        ret = -1;
+        goto END;
+        #endif
+    }
+    printf("partition_num = %d \n",partition_num);
+
+    for (i=0; i<partition_num;i++) {
         printf("%s:0x%08x\n", dtb_zip[i].partition_name, dtb_zip[i].partition_size);
         printf("%s:0x%08x\n", dtb_dev[i].partition_name, dtb_dev[i].partition_size);
 
         if (!strcmp("recovery", dtb_dev[i].partition_name)) {
             recovery_size1 = dtb_zip[i].partition_size;
             recovery_dev = i;
+            recovery_size_dev = dtb_dev[i].partition_size;
         }
         if (!strcmp("recovery", dtb_zip[i].partition_name)) {
             recovery_zip = i;
+            recovery_size_zip = dtb_zip[i].partition_size;
         }
 
         if (!strcmp("data", dtb_dev[i].partition_name)) {
-            data_dev= i;
+            data_dev = i;
         }
         if (!strcmp("data", dtb_zip[i].partition_name)) {
             data_zip = i;
+        }
+
+        if (!strcmp("cache", dtb_dev[i].partition_name)) {
+            cache_size_dev = dtb_dev[i].partition_size;
+        }
+        if (!strcmp("cache", dtb_zip[i].partition_name)) {
+            cache_size_zip = dtb_zip[i].partition_size;
         }
 
         if ((strcmp(dtb_zip[i].partition_name, dtb_dev[i].partition_name) != 0)||
@@ -732,18 +758,31 @@ RecoveryDtbCheck(const ZipArchive zipArchive){
         data_offset_zip += dtb_zip[i].partition_size;
     }
 
+    for (i=0;i<2;i++) {
+        cache_offset_dev += dtb_dev[i].partition_size;
+        cache_offset_zip += dtb_zip[i].partition_size;
+    }
+
     printf("recovery_dev: %d  recovery_offset_dev :0x%08x\n", recovery_dev, recovery_offset_dev);
     printf("recovery_zip: %d  recovery_offset_zip :0x%08x\n", recovery_zip, recovery_offset_zip);
     printf("data_dev: %d  data_offset_dev :0x%08x\n", data_dev, data_offset_dev);
     printf("data_zip: %d  data_offset_zip :0x%08x\n", data_zip, data_offset_zip);
+    printf("cache_offset_dev :0x%08x, cache_size_dev: %d\n", cache_offset_dev, cache_size_dev);
+    printf("cache_offset_zip :0x%08x, cache_size_zip: %d\n", cache_offset_zip, cache_size_zip);
 
     if (data_offset_dev != data_offset_zip) {
         printf("data changed, need wipe_data\n ");
         ret = 3;
     }
 
-    if (recovery_offset_dev != recovery_offset_zip) {
-        printf("dtb check the partitions not match! can not upgrade!\n ");
+    if ((recovery_offset_dev != recovery_offset_zip) || (recovery_size_dev != recovery_size_zip)) {
+        printf("recovery part changed! can not upgrade!\n ");
+        ret = -1;
+        goto END;
+    }
+
+    if ((cache_offset_dev != cache_offset_zip) || (cache_size_dev != cache_size_zip)) {
+        printf("cache part changed! can not upgrade!\n ");
         ret = -1;
         goto END;
     }
