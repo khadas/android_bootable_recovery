@@ -640,10 +640,12 @@ finish_recovery(const char *send_intent) {
         if (has_cache) {
             LOGI("Saving locale \"%s\"\n", locale);
             FILE* fp = fopen_path(LOCALE_FILE, "w");
-            fwrite(locale, 1, len, fp);
-            fflush(fp);
-            fsync(fileno(fp));
-            check_and_fclose(fp, LOCALE_FILE);
+            if (fp != NULL) {
+                fwrite(locale, 1, len, fp);
+                fflush(fp);
+                fsync(fileno(fp));
+                check_and_fclose(fp, LOCALE_FILE);
+            }
         }
     }
 
