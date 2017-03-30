@@ -21,11 +21,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#ifndef UPDATER_USE
 #define LOGE(...) ui_print("E:" __VA_ARGS__)
-#else
-#define LOGE(...) printf(__VA_ARGS__)
-#endif
 #define LOGW(...) fprintf(stdout, "W:" __VA_ARGS__)
 #define LOGI(...) fprintf(stdout, "I:" __VA_ARGS__)
 

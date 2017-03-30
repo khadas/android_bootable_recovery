@@ -41,7 +41,6 @@ enum CauseCode {
     kSetMetadataFailure,
     kTune2FsFailure,
     kRebootFailure,
-    kDtbCheckFailure,
     kVendorFailure = 200
 };
 

@@ -36,7 +36,7 @@ static const Device::BuiltinAction MENU_ACTIONS[] = {
     Device::REBOOT,
     Device::REBOOT_BOOTLOADER,
     Device::APPLY_ADB_SIDELOAD,
-    Device::APPLY_SDCARD,
+    Device::APPLY_EXT,
     Device::WIPE_DATA,
 #ifndef AB_OTA_UPDATER
     Device::WIPE_CACHE,
@@ -57,20 +57,6 @@ const char* const* Device::GetMenuItems() {
 }
 
 Device::BuiltinAction Device::InvokeMenuItem(int menu_position) {
-  switch (menu_position) {
-    case 0: return REBOOT;
-    case 1: return REBOOT_BOOTLOADER;
-    case 2: return APPLY_ADB_SIDELOAD;
-    case 3: return APPLY_EXT;
-    case 4: return WIPE_DATA;
-    case 5: return WIPE_CACHE;
-    case 6: return MOUNT_SYSTEM;
-    case 7: return VIEW_RECOVERY_LOGS;
-    case 8: return RUN_GRAPHICS_TEST;
-    case 9: return SHUTDOWN;
-    default: break;//return NO_ACTION;
-  }
-
   return menu_position < 0 ? NO_ACTION : MENU_ACTIONS[menu_position];
 }
 

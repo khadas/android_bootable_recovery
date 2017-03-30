@@ -39,7 +39,6 @@
 extern bool have_eio_error;
 
 struct selabel_handle *sehandle;
-int wipe_flag;
 
 int main(int argc, char** argv) {
     // Various things log information to stdout or stderr more or less
@@ -48,7 +47,6 @@ int main(int argc, char** argv) {
     // appear in the right order.
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
-    wipe_flag = 0;
 
     if (argc != 4 && argc != 5) {
         printf("unexpected number of arguments (%d)\n", argc);
@@ -186,12 +184,6 @@ int main(int argc, char** argv) {
             if (state.cause_code != kNoCause) {
                 fprintf(cmd_pipe, "log cause: %d\n", state.cause_code);
             }
-        }
-
-        if (state.cause_code == kDtbCheckFailure) {
-            printf("dtb has changed, update dtb.img & recovery.img only ok\n");
-            fprintf(cmd_pipe, "retry_update\n");
-            RebootToRecovery(package_filename, wipe_flag);
         }
 
         free(state.errmsg);

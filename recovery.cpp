@@ -62,16 +62,11 @@
 #include "minui/minui.h"
 #include "minzip/DirUtil.h"
 #include "minzip/Zip.h"
+#include "recovery_extra/recovery_amlogic.h"
 #include "roots.h"
 #include "ui.h"
 #include "unique_fd.h"
 #include "screen_ui.h"
-
-#include "ubootenv/set_display_mode.h"
-
-extern "C" {
-#include "ubootenv/uboot_env.h"
-}
 
 struct selabel_handle *sehandle;
 
@@ -94,9 +89,6 @@ static const struct option OPTIONS[] = {
   { "wipe_package_size", required_argument, NULL, 0 },
   { NULL, 0, NULL, 0 },
 };
-
-static const char *UDISK_COMMAND_FILE = "/udisk/factory_update_param.aml";
-static const char *SDCARD_COMMAND_FILE = "/sdcard/factory_update_param.aml";
 
 // More bootreasons can be found in "system/core/bootstat/bootstat.cpp".
 static const std::vector<std::string> bootreason_blacklist {
@@ -199,11 +191,6 @@ static bool has_cache = false;
 
 static const int MAX_ARG_LENGTH = 4096;
 static const int MAX_ARGS = 100;
-
-extern "C"
-{
-    extern int remoteinit(const char* path);
-}
 
 // open a given path, mounting partitions as necessary
 FILE* fopen_path(const char *path, const char *mode) {
@@ -358,52 +345,24 @@ get_args(int *argc, char ***argv) {
         }
     }
 
-    // --- if that doesn't work, try the command file form environment:recovery_command
-    if (*argc <= 1) {
-        char *parg = NULL;
-        char *recovery_command = get_bootloader_env("recovery_command");
-        if (recovery_command != NULL && strcmp(recovery_command, "")) {
-            char *argv0 = (*argv)[0];
-            *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
-            (*argv)[0] = argv0;  // use the same program name
-
-            char buf[MAX_ARG_LENGTH];
-            strcpy(buf, recovery_command);
-
-            if ((parg = strtok(buf, "#")) == NULL) {
-                LOGE("Bad bootloader arguments\n\"%.20s\"\n", recovery_command);
-            } else {
-                (*argv)[1] = strdup(parg);  // Strip newline.
-                for (*argc = 2; *argc < MAX_ARGS; ++*argc) {
-                    if ((parg = strtok(NULL, "#")) == NULL) {
-                        break;
-                    } else {
-                        (*argv)[*argc] = strdup(parg);  // Strip newline.
-                    }
-                }
-                LOGI("Got arguments from bootloader\n");
-            }
-        } else {
-            LOGE("Bad bootloader arguments\n\"%.20s\"\n", recovery_command);
-        }
-    }
-
-    // --- if that doesn't work, try the command file
-    char * temp_args = NULL;
-    if (*argc <= 1) {
+    // --- if that doesn't work, try the command file (if we have /cache).
+    if (*argc <= 1 && has_cache) {
         FILE *fp = fopen_path(COMMAND_FILE, "r");
         if (fp != NULL) {
+            char *token;
             char *argv0 = (*argv)[0];
             *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
             (*argv)[0] = argv0;  // use the same program name
 
             char buf[MAX_ARG_LENGTH];
-            for (*argc = 1; *argc < MAX_ARGS; ) {
+            for (*argc = 1; *argc < MAX_ARGS; ++*argc) {
                 if (!fgets(buf, sizeof(buf), fp)) break;
-                temp_args = strtok(buf, "\r\n");
-                if (temp_args == NULL)  continue;
-                (*argv)[*argc]  = strdup(temp_args);   // Strip newline.
-                ++*argc;
+                token = strtok(buf, "\r\n");
+                if (token != NULL) {
+                    (*argv)[*argc] = strdup(token);  // Strip newline.
+                } else {
+                    --*argc;
+                }
             }
 
             check_and_fclose(fp, COMMAND_FILE);
@@ -411,61 +370,7 @@ get_args(int *argc, char ***argv) {
         }
     }
 
-    // --- sleep 1 second to ensure SD card initialization complete
-    usleep(1000000);
-
-    // --- if that doesn't work, try the sdcard command file
-    if (*argc <= 1) {
-        FILE *fp = fopen_path(SDCARD_COMMAND_FILE, "r");
-        if (fp != NULL) {
-            char *argv0 = (*argv)[0];
-            *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
-            (*argv)[0] = argv0;  // use the same program name
-
-            char buf[MAX_ARG_LENGTH];
-            for (*argc = 1; *argc < MAX_ARGS; ) {
-                if (!fgets(buf, sizeof(buf), fp)) break;
-                temp_args = strtok(buf, "\r\n");
-                if (temp_args == NULL)  continue;
-                (*argv)[*argc]  = strdup(temp_args);  // Strip newline.
-                ++*argc;
-            }
-
-            check_and_fclose(fp, SDCARD_COMMAND_FILE);
-            LOGI("Got arguments from %s\n", SDCARD_COMMAND_FILE);
-        }
-    }
-
-    // --- if that doesn't work, try the udisk command file
-    if (*argc <= 1) {
-        FILE *fp = fopen_path(UDISK_COMMAND_FILE, "r");
-        if (fp != NULL) {
-            char *argv0 = (*argv)[0];
-            *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
-            (*argv)[0] = argv0;  // use the same program name
-
-            char buf[MAX_ARG_LENGTH];
-            for (*argc = 1; *argc < MAX_ARGS; ) {
-                if (!fgets(buf, sizeof(buf), fp)) break;
-                temp_args = strtok(buf, "\r\n");
-                if (temp_args == NULL)  continue;
-                (*argv)[*argc]  = strdup(temp_args);   // Strip newline.
-                ++*argc;
-            }
-
-            check_and_fclose(fp, UDISK_COMMAND_FILE);
-            LOGI("Got arguments from %s\n", UDISK_COMMAND_FILE);
-        }
-    }
-
-    // --- if no argument, then force show_text
-    if (*argc <= 1) {
-        char *argv0 = (*argv)[0];
-        *argv = (char **) malloc(sizeof(char *) * MAX_ARGS);
-        (*argv)[0] = argv0;  // use the same program name
-        (*argv)[1] = (char *)"--show_text";
-        *argc = 2;
-    }
+    amlogic_get_args(argc, argv);
 
     // --> write the arguments we have back into the bootloader control block
     // always boot into recovery after this (until finish_recovery() is called)
@@ -953,8 +858,6 @@ static bool wipe_data(int should_confirm, Device* device) {
     modified_flash = true;
 
     ui->Print("\n-- Wiping data...\n");
-    instaboot_clear();
-
     bool success =
         device->PreWipeData() &&
         erase_volume("/data") &&
@@ -1234,8 +1137,6 @@ static int ext_update(Device* device, bool wipe_cache) {
 
     ui->Print("\n-- Install %s ...\n", update_package);
     set_sdcard_update_bootloader_message();
-    instaboot_disable();
-    instaboot_clear();
     status = install_package(update_package, &wipe_cache, TEMPORARY_INSTALL_FILE, true, 0);
 
     if (status == INSTALL_SUCCESS && wipe_cache) {
@@ -1469,9 +1370,9 @@ prompt_and_wait(Device* device, int status) {
                 // the build system).
                 // Bug: 22855115
                 if (strcmp(system_root_image, "true") == 0) {
-                    /*if (ensure_path_mounted_at("/", "/system_root") != -1) {
+                    if (ensure_path_mounted_at("/", "/system_root") != -1) {
                         ui->Print("Mounted /system.\n");
-                    }*/
+                    }
                 } else {
                     if (ensure_path_mounted("/system") != -1) {
                         ui->Print("Mounted /system.\n");
@@ -1712,8 +1613,7 @@ int main(int argc, char **argv) {
     // redirect_stdio should be called only in non-sideload mode. Otherwise
     // we may have two logger instances with different timestamps.
     redirect_stdio(TEMPORARY_LOG_FILE);
-    set_display_mode("/etc/mesondisplay.cfg");
-    remoteinit("/etc/remote.conf");
+    amlogic_init();
 
     printf("Starting recovery (pid %d) on %s", getpid(), ctime(&start));
 
@@ -1848,8 +1748,6 @@ int main(int argc, char **argv) {
     int status = INSTALL_SUCCESS;
 
     if (update_package != NULL) {
-        instaboot_disable();
-        instaboot_clear();
         // It's not entirely true that we will modify the flash. But we want
         // to log the update attempt since update_package is non-NULL.
         modified_flash = true;

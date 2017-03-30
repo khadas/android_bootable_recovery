@@ -62,6 +62,7 @@ LOCAL_C_INCLUDES += \
     system/vold \
     system/extras/ext4_utils \
     system/core/adb \
+    device/amlogic/common/recovery
 
 LOCAL_STATIC_LIBRARIES := \
     libbatterymonitor \
@@ -83,6 +84,7 @@ LOCAL_STATIC_LIBRARIES := \
     liblog \
     libselinux \
     libm \
+    librecovery_amlogic \
     libenv \
     libsystemcontrol_static \
     libremotecfg_static \
@@ -157,10 +159,6 @@ include \
     $(LOCAL_PATH)/otafault/Android.mk \
     $(LOCAL_PATH)/tests/Android.mk \
     $(LOCAL_PATH)/tools/Android.mk \
-    $(LOCAL_PATH)/check/Android.mk \
     $(LOCAL_PATH)/uncrypt/Android.mk \
     $(LOCAL_PATH)/updater/Android.mk \
-    $(LOCAL_PATH)/ubootenv/Android.mk \
-    $(LOCAL_PATH)/update_verifier/Android.mk \
-    $(LOCAL_PATH)/fdt/Android.mk
-
+    $(LOCAL_PATH)/update_verifier/Android.mk
