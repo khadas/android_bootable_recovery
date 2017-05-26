@@ -300,10 +300,11 @@ int setup_install_mounts() {
         } else if (strcmp(v->mount_point, "/cache") == 0){
             if (ensure_path_mounted(v->mount_point) != 0) {
                 format_volume("/cache");
-            if (ensure_path_mounted(v->mount_point) != 0) {
-                LOGE("failed to mount %s\n", v->mount_point);
-                return -1;
-            }
+                if (ensure_path_mounted(v->mount_point) != 0) {
+                    LOGE("failed to mount %s\n", v->mount_point);
+                    return -1;
+                }
+                mkdir("/cache/recovery", 0755);
             }
         } else {
             if (ensure_path_unmounted(v->mount_point) != 0) {
