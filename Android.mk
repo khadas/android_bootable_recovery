@@ -62,7 +62,7 @@ LOCAL_C_INCLUDES += \
     system/vold \
     system/extras/ext4_utils \
     system/core/adb \
-    device/amlogic/common/recovery
+    device/khadas/common/recovery
 
 LOCAL_STATIC_LIBRARIES := \
     libbatterymonitor \
