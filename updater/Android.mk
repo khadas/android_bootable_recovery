@@ -58,8 +58,7 @@ tune2fs_static_libraries := \
  libext2_quota \
  libext2_uuid_static \
  libext2_e2p \
- libext2fs \
- libiconv
+ libext2fs
 LOCAL_STATIC_LIBRARIES += libtune2fs $(tune2fs_static_libraries)
 
 LOCAL_C_INCLUDES += external/e2fsprogs/misc
