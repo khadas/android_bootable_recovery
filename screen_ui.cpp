@@ -281,12 +281,14 @@ static const char* LONG_PRESS_HELP[] = {
 // Redraw everything on the screen.  Does not flip pages.
 // Should only be called with updateMutex locked.
 void ScreenRecoveryUI::draw_screen_locked() {
+    draw_background_locked();
+    draw_foreground_locked();
     if (!show_text) {
-        draw_background_locked();
-        draw_foreground_locked();
+        //draw_background_locked();
+        //draw_foreground_locked();
     } else {
-        gr_color(0, 0, 0, 255);
-        gr_clear();
+        //gr_color(0, 0, 0, 255);
+        //gr_clear();
 
         int y = 0;
         if (show_menu) {
@@ -374,7 +376,7 @@ void ScreenRecoveryUI::ProgressThreadLoop() {
 
         // update the installation animation, if active
         // skip this if we have a text overlay (too expensive to update)
-        if ((currentIcon == INSTALLING_UPDATE || currentIcon == ERASING) && !show_text) {
+        if ((currentIcon == INSTALLING_UPDATE || currentIcon == ERASING) /*&& !show_text*/) {
             if (!intro_done) {
                 if (current_frame == intro_frames - 1) {
                     intro_done = true;

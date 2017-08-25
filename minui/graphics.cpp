@@ -77,7 +77,7 @@ static void text_blend(unsigned char* src_p, int src_row_bytes,
                 *px++ = gr_current_r;
                 *px++ = gr_current_g;
                 *px++ = gr_current_b;
-                px++;
+                *px++ = 255;
             } else if (a > 0) {
                 *px = (*px * (255-a) + gr_current_r * a) / 255;
                 ++px;
@@ -85,9 +85,10 @@ static void text_blend(unsigned char* src_p, int src_row_bytes,
                 ++px;
                 *px = (*px * (255-a) + gr_current_b * a) / 255;
                 ++px;
-                ++px;
+                *px++ = 255;
             } else {
-                px += 4;
+                px += 3;
+                *px++ = 255;
             }
         }
         src_p += src_row_bytes;
@@ -197,7 +198,7 @@ void gr_fill(int x1, int y1, int x2, int y2)
                 *px++ = gr_current_r;
                 *px++ = gr_current_g;
                 *px++ = gr_current_b;
-                px++;
+                *px++ = 255;
             }
             p += gr_draw->row_bytes;
         }
@@ -212,7 +213,7 @@ void gr_fill(int x1, int y1, int x2, int y2)
                 ++px;
                 *px = (*px * (255-gr_current_a) + gr_current_b * gr_current_a) / 255;
                 ++px;
-                ++px;
+                *px++ = 255;
             }
             p += gr_draw->row_bytes;
         }
@@ -236,8 +237,26 @@ void gr_blit(GRSurface* source, int sx, int sy, int w, int h, int dx, int dy) {
     unsigned char* dst_p = gr_draw->data + dy*gr_draw->row_bytes + dx*gr_draw->pixel_bytes;
 
     int i;
+    int j;
     for (i = 0; i < h; ++i) {
-        memcpy(dst_p, src_p, w * source->pixel_bytes);
+        if (source->pixel_bytes == 4) {
+            unsigned char *p0 = src_p;
+            unsigned char *p1 = dst_p;
+            unsigned char alpha = 255;
+            for (j = 0; j < w; j++) {
+                alpha = *(p0+3);
+                *p1 = (*p1 * (255-alpha) + *p0++ * alpha) / 255;
+                ++p1;
+                *p1 = (*p1 * (255-alpha) + *p0++ * alpha) / 255;
+                ++p1;
+                *p1 = (*p1 * (255-alpha) + *p0++ * alpha) / 255;
+                ++p1;
+                *p1++ = 255;
+                ++p0;
+            }
+        } else {
+            memcpy(dst_p, src_p, w * source->pixel_bytes);
+        }
         src_p += source->row_bytes;
         dst_p += gr_draw->row_bytes;
     }

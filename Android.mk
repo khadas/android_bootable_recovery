@@ -95,8 +95,14 @@ LOCAL_CLANG := true
 LOCAL_C_INCLUDES += \
     system/vold \
     system/core/adb \
+    device/amlogic/common/recovery
 
 LOCAL_STATIC_LIBRARIES := \
+    librecovery_amlogic \
+    libamlogic_ui \
+    libenv \
+    libsystemcontrol_static \
+    libremotecfg_static \
     librecovery \
     libbatterymonitor \
     libbootloader_message \

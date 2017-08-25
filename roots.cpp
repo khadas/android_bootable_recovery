@@ -31,6 +31,7 @@
 #include <ext4_utils/wipe.h>
 #include <fs_mgr.h>
 
+#include "recovery_extra/recovery_amlogic.h"
 #include "common.h"
 #include "mounts.h"
 #include "cryptfs.h"
@@ -100,6 +101,11 @@ int ensure_path_mounted_at(const char* path, const char* mount_point) {
     }
 
     mkdir(mount_point, 0755);  // in case it doesn't already exist
+
+    int ret = ensure_path_mounted_extra(v);
+    if (ret != 2) {
+        return ret;
+    }
 
     if (strcmp(v->fs_type, "ext4") == 0 ||
                strcmp(v->fs_type, "squashfs") == 0 ||
@@ -267,13 +273,20 @@ int setup_install_mounts() {
     for (int i = 0; i < fstab->num_entries; ++i) {
         Volume* v = fstab->recs + i;
 
-        if (strcmp(v->mount_point, "/tmp") == 0 ||
-            strcmp(v->mount_point, "/cache") == 0) {
+        if (strcmp(v->mount_point, "/tmp") == 0) {
             if (ensure_path_mounted(v->mount_point) != 0) {
                 LOG(ERROR) << "failed to mount " << v->mount_point;
                 return -1;
             }
-
+        } else if (strcmp(v->mount_point, "/cache") == 0) {
+            if (ensure_path_mounted(v->mount_point) != 0) {
+                format_volume("/cache");
+                if (ensure_path_mounted(v->mount_point) != 0) {
+                    LOG(ERROR) << "failed to mount " << v->mount_point;
+                    return -1;
+                }
+                mkdir("/cache/recovery", 0755);
+            }
         } else {
             if (ensure_path_unmounted(v->mount_point) != 0) {
                 LOG(ERROR) << "failed to unmount " << v->mount_point;
