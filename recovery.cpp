@@ -69,7 +69,6 @@
 #include "minadbd/minadbd.h"
 #include "minui/minui.h"
 #include "otautil/DirUtil.h"
-#include "recovery_extra/recovery_amlogic.h"
 #include "roots.h"
 #include "rotate_logs.h"
 #include "screen_ui.h"
@@ -135,6 +134,8 @@ bool modified_flash = false;
 std::string stage;
 const char* reason = nullptr;
 struct selabel_handle* sehandle;
+
+extern void amlogic_get_args(std::vector<std::string>& args);
 
 /*
  * The recovery tool communicates with the main system through /cache files.
@@ -366,6 +367,7 @@ static std::vector<std::string> get_args(const int argc, char** const argv) {
     }
   }
 
+  //add get args from factory_update_param.aml
   amlogic_get_args(args);
 
   // Write the arguments (excluding the filename in args[0]) back into the
@@ -493,12 +495,10 @@ static void finish_recovery() {
         LOG(INFO) << "Saving locale \"" << locale << "\"";
 
         FILE* fp = fopen_path(LOCALE_FILE, "w");
-        if (fp != NULL) {
-            if (!android::base::WriteStringToFd(locale, fileno(fp))) {
-                PLOG(ERROR) << "Failed to save locale to " << LOCALE_FILE;
-            }
-            check_and_fclose(fp, LOCALE_FILE);
+        if (!android::base::WriteStringToFd(locale, fileno(fp))) {
+            PLOG(ERROR) << "Failed to save locale to " << LOCALE_FILE;
         }
+        check_and_fclose(fp, LOCALE_FILE);
     }
 
     copy_logs();
@@ -1471,7 +1471,6 @@ int main(int argc, char **argv) {
     // redirect_stdio should be called only in non-sideload mode. Otherwise
     // we may have two logger instances with different timestamps.
     redirect_stdio(TEMPORARY_LOG_FILE);
-    amlogic_init();
 
     printf("Starting recovery (pid %d) on %s", getpid(), ctime(&start));
 

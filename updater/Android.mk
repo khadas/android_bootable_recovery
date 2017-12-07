@@ -99,8 +99,6 @@ LOCAL_STATIC_LIBRARIES := \
     $(TARGET_RECOVERY_UPDATER_EXTRA_LIBS) \
     $(updater_common_static_libraries)
 
-LOCAL_STATIC_LIBRARIES += libenv libsystemcontrol_static libsecurity libdtb
-
 # Each library in TARGET_RECOVERY_UPDATER_LIBS should have a function
 # named "Register_<libname>()".  Here we emit a little C function that
 # gets #included by updater.c.  It calls all those registration

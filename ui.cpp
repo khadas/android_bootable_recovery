@@ -44,13 +44,11 @@
 #include "common.h"
 #include "roots.h"
 #include "device.h"
-#include "ui/amlogic_ui.h"
 
 static constexpr int UI_WAIT_KEY_TIMEOUT_SEC = 120;
-//static constexpr const char* BRIGHTNESS_FILE = "/sys/class/leds/lcd-backlight/brightness";
-//static constexpr const char* MAX_BRIGHTNESS_FILE = "/sys/class/leds/lcd-backlight/max_brightness";
-static constexpr const char* BRIGHTNESS_FILE = "/sys/class/leds/led-sys/brightness";
-static constexpr const char* MAX_BRIGHTNESS_FILE = "/sys/class/leds/led-sys/max_brightness";
+static constexpr const char* BRIGHTNESS_FILE = "/sys/class/leds/lcd-backlight/brightness";
+static constexpr const char* MAX_BRIGHTNESS_FILE = "/sys/class/leds/lcd-backlight/max_brightness";
+
 RecoveryUI::RecoveryUI()
     : locale_(""),
       rtl_locale_(false),
@@ -130,8 +128,6 @@ bool RecoveryUI::Init(const std::string& locale) {
   // Set up the locale info.
   SetLocale(locale);
 
-  load_key_map();
-
   ev_init(std::bind(&RecoveryUI::OnInputEvent, this, std::placeholders::_1, std::placeholders::_2));
 
   ev_iterate_available_keys(std::bind(&RecoveryUI::OnKeyDetected, this, std::placeholders::_1));
@@ -174,12 +170,6 @@ int RecoveryUI::OnInputEvent(int fd, uint32_t epevents) {
     }
 
     if (ev.type == EV_KEY && ev.code <= KEY_MAX) {
-
-        int code = getMapKey(ev.code);
-        if (code > 0) {
-            ev.code = code;
-        }
-
         ProcessKey(ev.code, ev.value);
     }
 
