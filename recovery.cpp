@@ -607,6 +607,24 @@ finish_recovery(const char *send_intent) {
     sync();  // For good measure.
 }
 
+static int exit_factory_mode_wipe_cmd_in_bcb(void)
+{
+	bootloader_message boot = {};
+	std::string err;
+
+	printf("enter exit_factory_mode_wipe_cmd_in_bcb \n");
+
+	strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
+	strlcpy(boot.recovery, "recovery\n--wipe_all\n", sizeof(boot.recovery));
+	if (!write_bootloader_message(boot, &err)) {
+		LOGE("%s\n", err.c_str());
+		printf("exit_factory_mode_wipe_cmd_in_bcb write_bootloader_message failed %s \n",err.c_str());
+	}
+
+	return 0;
+}
+
+
 static int copyFileToMem(const char *path,char *p,int *count,int size) {
     char *tmp = p;
     FILE* fd = fopen_path(path,"r");
@@ -1715,6 +1733,9 @@ int main(int argc, char **argv) {
     const char *resize_partition_path = NULL;
     int resize_partition = 0;
 
+	int exit_from_factory = 0;
+
+
     int arg;
     int option_index;
     while ((arg = getopt_long(argc, argv, "", OPTIONS, &option_index)) != -1) {
@@ -1929,6 +1950,9 @@ int main(int argc, char **argv) {
             bAutoUpdateComplete=true;
     }else if (factory_mode != NULL){
         status = rksdboot.do_rk_factory_mode();
+
+		printf("do_factory_mode status=%d factory_mode=%s \n", status, factory_mode);
+		exit_from_factory = 1;
     }else if (sdboot_update_package != NULL){
         printf("bSDBoot = %d, sdboot_update_package=%s\n", rksdboot.isSDboot(), sdboot_update_package);
         startLed();
@@ -2040,19 +2064,36 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!sideload_auto_reboot && (status == INSTALL_ERROR || status == INSTALL_CORRUPT)) {
-        copy_logs();
-        ui->SetBackground(RecoveryUI::ERROR);
-    }
+	if(exit_from_factory)
+	{
+		//DO Nothing for now
+		printf("exit from pcba okay exit_from_factory=%d \n", exit_from_factory);
+	}
+	else
+	{
+	    if (!sideload_auto_reboot && (status == INSTALL_ERROR || status == INSTALL_CORRUPT)) {
+	        copy_logs();
+	        ui->SetBackground(RecoveryUI::ERROR);
+	    }
+	}
 
-    Device::BuiltinAction after = shutdown_after ? Device::SHUTDOWN : Device::REBOOT;
-    if ((status != INSTALL_SUCCESS && status != INSTALL_SKIPPED && !sideload_auto_reboot) ||
-            ui->IsTextVisible()) {
-        Device::BuiltinAction temp = prompt_and_wait(device, status);
-        if (temp != Device::NO_ACTION) {
-            after = temp;
-        }
-    }
+	Device::BuiltinAction after = shutdown_after ? Device::SHUTDOWN : Device::REBOOT;
+	if(exit_from_factory)
+	{
+		//Do Nothing for now
+		printf("exit from pcba exit_from_factory=%d \n", exit_from_factory);
+	}
+	else
+	{
+	    if ((status != INSTALL_SUCCESS && status != INSTALL_SKIPPED && !sideload_auto_reboot) ||
+	            ui->IsTextVisible()) {
+	        Device::BuiltinAction temp = prompt_and_wait(device, status);
+	        if (temp != Device::NO_ACTION) {
+	            after = temp;
+	        }
+	    }
+	}
+
 
     //format data after update parameter.
     if(bWipeAfterUpdate){
@@ -2063,6 +2104,11 @@ int main(int argc, char **argv) {
 
     // Save logs and clean up before rebooting or shutting down.
     finish_recovery(send_intent);
+
+	if(exit_from_factory)
+	{
+		exit_factory_mode_wipe_cmd_in_bcb();
+	}
 
     switch (after) {
         case Device::SHUTDOWN:
