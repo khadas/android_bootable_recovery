@@ -2856,11 +2856,15 @@ extern int format_volume(const char* volume, const char* directory);
 bool CRKAndroidDevice::EraseSparseRegion(const char* volume,const char* directory)
 {
 	bool bSuccess = true;
+    //if volume is system.then set volume is "",because system as root
+    if(strcmp("/system", volume) == 0)
+        volume = "/";
+    printf("EraseSparseRegion  volume is %s\n",volume);
     if(format_volume(volume, directory) == 0){
-        printf("add by huangkaihui format_volume is ok!!!\n");
+        printf("add by zhangwei format_volume is ok!!!\n");
         return true;
     }else{
-        printf("add by huangkaihui format_volume is failed!!!\n");
+        printf("add by zhangwei format_volume is failed!!!\n");
         return false;
     }
 	//º”‘ÿfstab

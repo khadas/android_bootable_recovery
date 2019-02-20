@@ -320,7 +320,6 @@ int CRKUsbComm::RKU_TestDeviceReady(DWORD *dwTotal,DWORD *dwCurrent,BYTE bySubCo
 }
 int CRKUsbComm::RKU_WriteLBALoader(DWORD dwPos,DWORD dwCount,BYTE* lpBuffer,BYTE bySubCode)
 {
-	printf("---------WriteLBA\n");
 	long long ret;
     long long dwPosBuf;
 	if (m_hLbaDev<0)
@@ -390,7 +389,6 @@ int CRKUsbComm::RKU_WriteLBALoader(DWORD dwPos,DWORD dwCount,BYTE* lpBuffer,BYTE
 }
 int CRKUsbComm::RKU_WriteLBA(DWORD dwPos,DWORD dwCount,BYTE* lpBuffer,BYTE bySubCode)
 {
-        printf("---------WriteLBA\n");
         long long ret;
     long long dwPosBuf;
         if (m_hLbaDev<0)

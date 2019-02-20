@@ -255,13 +255,14 @@ int ensure_path_mounted_at(const char* path, const char* mount_point) {
         int result = mount(v->blk_device, v->mount_point, v->fs_type,
                            MS_NOATIME | MS_NODEV | MS_NODIRATIME, "shortname=mixed,utf8");
         if (result == 0) return 0;
-
+        printf("v->blk_device is %s\n",v->blk_device);
+        LOG(ERROR) << "trying mount fs"<< blk_device << " to vfat.";
         if (blk_device !=NULL){
             result = mount(blk_device, v->mount_point, v->fs_type,
                            MS_NOATIME | MS_NODEV | MS_NODIRATIME, "shortname=mixed,utf8");
             if (result == 0) return 0;
         }
-        
+        printf("blk_device is %s\n",blk_device);
         LOG(ERROR) << "trying mount "<< v->blk_device << " to ntfs.";
         result = mount(v->blk_device, v->mount_point, "ntfs",
                        MS_NOATIME | MS_NODEV | MS_NODIRATIME, "");
@@ -315,9 +316,15 @@ int ensure_path_unmounted(const char* path) {
     return -1;
   }
 
-  MountedVolume* mv = find_mounted_volume_by_mount_point(v->mount_point);
+  printf("ensure_path_unmounted path is %s\n",path);
+  MountedVolume* mv;
+  if(strcmp(path, "/system_root") == 0)
+    mv = find_mounted_volume_by_mount_point(path);
+  else
+    mv = find_mounted_volume_by_mount_point(v->mount_point);
   if (mv == nullptr) {
     // Volume is already unmounted.
+    printf("Volume is already unmounted\n");
     return 0;
   }
 
@@ -383,9 +390,17 @@ int format_volume(const char* volume, const char* directory) {
     LOG(ERROR) << "can't give path \"" << volume << "\" to format_volume";
     return -1;
   }
-  if (ensure_path_unmounted(volume) != 0) {
-    LOG(ERROR) << "format_volume: Failed to unmount \"" << v->mount_point << "\"";
-    return -1;
+  if(strcmp(volume, "/") == 0) {
+      if (ensure_path_unmounted("/system_root") != 0) {
+        LOG(ERROR) << "format_volume: Failed to unmount \"" << "/system_root" << "\"";
+        return -1; 
+      }
+  }
+  else{
+      if (ensure_path_unmounted(volume) != 0) {
+        LOG(ERROR) << "format_volume: Failed to unmount \"" << v->mount_point << "\"";
+        return -1;
+      }
   }
   if (strcmp(v->mount_point, "/frp") != 0 && strcmp(v->fs_type, "ext4") != 0 && strcmp(v->fs_type, "f2fs") != 0) {
     LOG(ERROR) << "format_volume: fs_type \"" << v->fs_type << "\" unsupported";

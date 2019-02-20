@@ -265,6 +265,7 @@ void init_sd_emmc_point(){
                 }else{
                     strcpy(result_point[ret], "");
                 }
+                printf("result_point[%d] is ----%s\n",ret,result_point[ret]);
             }
         }
 

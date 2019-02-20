@@ -74,6 +74,8 @@ int unmount_mounted_volume(MountedVolume* volume) {
   // already unmounted using this function.
   std::string mount_point = volume->mount_point;
   volume->mount_point.clear();
+  if(mount_point == "/")
+      mount_point = "/system_root";
   int result = umount(mount_point.c_str());
   if (result == -1) {
     PLOG(WARNING) << "Failed to umount " << mount_point;
