@@ -810,6 +810,7 @@ static bool prompt_and_wipe_data(Device* device) {
   }
 }
 
+#ifdef RECOVERY_HAS_PARAM
 // Return true on success.
 static bool wipe_param(bool should_confirm, Device* device) {
 
@@ -824,6 +825,7 @@ static bool wipe_param(bool should_confirm, Device* device) {
     ui->Print("Param wipe %s.\n", success ? "complete" : "failed");
     return success;
 }
+#endif
 
 // Return true on success.
 static bool wipe_cache(bool should_confirm, Device* device) {
