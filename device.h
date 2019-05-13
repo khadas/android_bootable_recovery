@@ -61,7 +61,9 @@ class Device {
     APPLY_ADB_SIDELOAD = 4,
     WIPE_DATA = 5,
     WIPE_CACHE = 6,
+#ifdef RECOVERY_HAS_PARAM
     WIPE_PARAM = 7,
+ #endif
     REBOOT_BOOTLOADER = 8,
     SHUTDOWN = 9,
     VIEW_RECOVERY_LOGS = 10,
