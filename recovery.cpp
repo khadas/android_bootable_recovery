@@ -79,6 +79,7 @@ static const struct option OPTIONS[] = {
   { "retry_count", required_argument, NULL, 'n' },
   { "wipe_data", no_argument, NULL, 'w' },
   { "wipe_cache", no_argument, NULL, 'c' },
+  { "resize2fs_data", no_argument, NULL, 'd' },
 #ifdef RECOVERY_HAS_PARAM
   { "wipe_param", no_argument, NULL, 'P' },
 #endif /*RECOVERY_HAS_PARAM */
@@ -1558,6 +1559,7 @@ int main(int argc, char **argv) {
   bool sideload = false;
   bool sideload_auto_reboot = false;
   bool just_exit = false;
+  bool resize_data = false;
   bool shutdown_after = false;
   int retry_count = 0;
   bool security_update = false;
@@ -1600,6 +1602,9 @@ int main(int argc, char **argv) {
         break;
       case 'p':
         shutdown_after = true;
+        break;
+       case 'd':
+        resize_data = true;
         break;
 #ifdef RECOVERY_HAS_PARAM
         case 'P': should_wipe_param = 1; break;
@@ -1792,6 +1797,31 @@ int main(int argc, char **argv) {
     ui->Print("\nInstall from ADB complete (status: %d).\n", status);
     if (sideload_auto_reboot) {
       ui->Print("Rebooting automatically.\n");
+    }
+  }
+
+  if (resize_data) {
+    const char *args2[4] = {"/sbin/resize2fs", "-f", "/dev/block/data"};
+    args2[3] = nullptr;
+    pid_t child = fork();
+    if (child == 0) {
+        execv("/sbin/resize2fs", (char* const*)args2);
+        printf("execv failed\n");
+        _exit(EXIT_FAILURE);
+    }
+
+    int status_t;
+    waitpid(child, &status_t, 0);
+    if (WIFEXITED(status_t)) {
+        if (WEXITSTATUS(status_t) != 0) {
+            printf("child exited with status:%d\n", WEXITSTATUS(status_t));
+            status = INSTALL_ERROR;
+        }
+    } else if (WIFSIGNALED(status_t)) {
+        printf("child terminated by signal :%d\n", WTERMSIG(status_t));
+        status = INSTALL_ERROR;
+    } else {
+        status = INSTALL_SUCCESS;
     }
   }
 
