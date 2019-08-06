@@ -30,6 +30,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <filesystem>
 #include <functional>
 #include <limits>
 #include <mutex>
@@ -774,7 +775,6 @@ int rkloader_bin(ZipArchiveHandle zip,const std::string& binary_path) {
   return INSTALL_SUCCESS;
 }
 
-
 static int really_install_rkloader_package(const std::string& path, bool needs_mount, RecoveryUI* ui) {
   ui->SetBackground(RecoveryUI::INSTALLING_UPDATE);
   ui->Print("Finding update package...\n");
@@ -837,7 +837,6 @@ static int really_install_rkloader_package(const std::string& path, bool needs_m
   return result;
 }
 
-
 int install_rkloader_package(const std::string& path, bool needs_mount, RecoveryUI* ui) {
   CHECK(!path.empty());
 
@@ -850,4 +849,50 @@ int install_rkloader_package(const std::string& path, bool needs_mount, Recovery
   }
 
   return result;
+}
+
+bool SetupPackageMount(const std::string& package_path, bool* should_use_fuse) {
+  CHECK(should_use_fuse != nullptr);
+
+  if (package_path.empty()) {
+    return false;
+  }
+
+  *should_use_fuse = true;
+  if (package_path[0] == '@') {
+    auto block_map_path = package_path.substr(1);
+    if (ensure_path_mounted(block_map_path) != 0) {
+      LOG(ERROR) << "Failed to mount " << block_map_path;
+      return false;
+    }
+    // uncrypt only produces block map only if the package stays on /data.
+    *should_use_fuse = false;
+    return true;
+  }
+
+  // Package is not a block map file.
+  if (ensure_path_mounted(package_path) != 0) {
+    LOG(ERROR) << "Failed to mount " << package_path;
+    return false;
+  }
+
+  // Reject the package if the input path doesn't equal the canonicalized path.
+  // e.g. /cache/../sdcard/update_package.
+  std::error_code ec;
+  auto canonical_path = std::filesystem::canonical(package_path, ec);
+  if (ec) {
+    LOG(ERROR) << "Failed to get canonical of " << package_path << ", " << ec.message();
+    return false;
+  }
+  if (canonical_path.string() != package_path) {
+    LOG(ERROR) << "Installation aborts. The canonical path " << canonical_path.string()
+               << " doesn't equal the original path " << package_path;
+    return false;
+  }
+
+  constexpr const char* CACHE_ROOT = "/cache";
+  if (android::base::StartsWith(package_path, CACHE_ROOT)) {
+    *should_use_fuse = false;
+  }
+  return true;
 }
