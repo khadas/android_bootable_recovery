@@ -32,6 +32,8 @@
 #include "otautil/roots.h"
 #include "recovery_ui/ui.h"
 
+#include "rkutility/rktools.h"
+
 constexpr const char* CACHE_ROOT = "/cache";
 constexpr const char* DATA_ROOT = "/data";
 constexpr const char* METADATA_ROOT = "/metadata";
@@ -118,6 +120,25 @@ bool WipeData(Device* device, bool convert_fbe) {
   if (success) {
     success &= device->PostWipeData();
   }
+  erase_baseparameter();
   ui->Print("Data wipe %s.\n", success ? "complete" : "failed");
   return success;
+}
+
+void SureMetadataMount() {
+  if (ensure_path_mounted(METADATA_ROOT)) {
+    printf("mount metadata fail,so formate...\n");
+    reset_tmplog_offset();
+    format_volume(METADATA_ROOT);
+    ensure_path_mounted(METADATA_ROOT);
+  }
+}
+void WipeFrp() {
+  printf("begin to wipe frp partion!\n");
+  int ret = format_volume("/frp");
+  if(ret<0){
+    printf("wiping frp failed!\n");
+  } else {
+    printf("wiping frp success!\n");
+  }
 }
