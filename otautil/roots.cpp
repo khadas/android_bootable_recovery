@@ -147,7 +147,7 @@ int format_volume(const std::string& volume, const std::string& directory) {
     LOG(ERROR) << "format_volume: Failed to unmount \"" << v->mount_point << "\"";
     return -1;
   }
-  if (v->fs_type != "ext4" && v->fs_type != "f2fs") {
+  if (v->mount_point != "/frp" && v->fs_type != "ext4" && v->fs_type != "f2fs") {
     LOG(ERROR) << "format_volume: fs_type \"" << v->fs_type << "\" unsupported";
     return -1;
   }
@@ -216,6 +216,25 @@ int format_volume(const std::string& volume, const std::string& directory) {
       return -1;
     }
     return 0;
+  }
+
+  if (v->mount_point == "/frp") {
+    LOG(INFO) << "format_volume for: fs_type: " << v->fs_type <<  "blk_device: " << v->blk_device << "mount_point: " <<  v->mount_point;
+    int fd = open((v->blk_device).c_str(), O_WRONLY);
+    if (fd < 0){
+        LOG(ERROR) << "format_volume: failed to open :  " <<  v->blk_device;
+        return -1;
+    }
+    uint64_t len = get_block_device_size(fd);
+    LOG(INFO) << "format_volume:len: " << len;
+    if(wipe_block_device(fd,len) == 0 ) {
+        LOG(INFO) << "format_volume: success to format : " << v->blk_device;
+        return 0;
+    }
+    else{
+        LOG(ERROR) << "format_volume: fail to format : " <<  v->blk_device;
+        return -1;
+    }
   }
 
   // Has to be f2fs because we checked earlier.
