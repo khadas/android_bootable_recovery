@@ -722,6 +722,22 @@ static void log_failure_code(ErrorCode code, const std::string& update_package) 
   LOG(INFO) << log_content;
 }
 
+static int exit_factory_mode_wipe_cmd_in_bcb(void)
+{
+  bootloader_message boot = {};
+  std::string err;
+
+  printf("enter exit_factory_mode_wipe_cmd_in_bcb \n");
+
+  strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
+  strlcpy(boot.recovery, "recovery\n--wipe_all\n", sizeof(boot.recovery));
+  if (!write_bootloader_message(boot, &err)) {
+    printf("exit_factory_mode_wipe_cmd_in_bcb write_bootloader_message failed %s \n",err.c_str());
+  }
+
+  return 0;
+}
+
 Device::BuiltinAction start_recovery(Device* device, const std::vector<std::string>& args) {
   static constexpr struct option OPTIONS[] = {
     { "fastboot", no_argument, nullptr, 0 },
@@ -742,11 +758,17 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
     { "wipe_cache", no_argument, nullptr, 0 },
     { "wipe_data", no_argument, nullptr, 0 },
     { "wipe_package_size", required_argument, nullptr, 0 },
+    { "wipe_all", no_argument, nullptr, 'w'+'a' },
+    { "fw_update", required_argument, nullptr, 'f'+'w' },
+    { "factory_mode", required_argument, nullptr, 'f' },
+    { "pcba_test", required_argument, nullptr, 'p'+'t' },
     { nullptr, 0, nullptr, 0 },
   };
 
   const char* update_package = nullptr;
+  const char *factory_mode = nullptr;
   bool should_wipe_data = false;
+  bool should_wipe_all = false;
   bool should_prompt_and_wipe_data = false;
   bool should_wipe_cache = false;
   bool should_wipe_ab = false;
@@ -765,6 +787,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
 
   int arg;
   int option_index;
+  int exit_from_factory = 0;
   // Parse everything before the last element (which must be a nullptr). getopt_long(3) expects a
   // null-terminated char* array, but without counting null as an arg (i.e. argv[argc] should be
   // nullptr).
@@ -813,6 +836,9 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
         }
         break;
       }
+      case 'w'+'a': { should_wipe_all = true; should_wipe_data = true; should_wipe_cache = true;} break;
+      case 'f': factory_mode = optarg; break;
+      case 'p'+'t': factory_mode = optarg; break;
       case '?':
         LOG(ERROR) << "Invalid command argument";
         continue;
@@ -839,6 +865,8 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
 
   ui->ResetKeyInterruptStatus();
   device->StartRecovery();
+
+  SureMetadataMount();
 
   printf("Command:");
   for (const auto& arg : args) {
@@ -918,7 +946,12 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
     if (!WipeData(device, convert_fbe)) {
       status = INSTALL_ERROR;
     }
-  } else if (should_prompt_and_wipe_data) {
+    if(should_wipe_all) {
+      WipeFrp();
+    }
+  }else if (factory_mode != nullptr){
+    exit_from_factory = 1;
+  }else if (should_prompt_and_wipe_data) {
     // Trigger the logging to capture the cause, even if user chooses to not wipe data.
     save_current_log = true;
 
@@ -971,10 +1004,16 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
     ui->SetBackground(RecoveryUI::NO_COMMAND);
   }
 
-  if (status == INSTALL_ERROR || status == INSTALL_CORRUPT) {
-    ui->SetBackground(RecoveryUI::ERROR);
-    if (!ui->IsTextVisible()) {
-      sleep(5);
+  if(exit_from_factory)
+  {
+    printf("exit from pcba okay exit_from_factory=%d \n", exit_from_factory);
+  }
+  else{
+    if (status == INSTALL_ERROR || status == INSTALL_CORRUPT) {
+      ui->SetBackground(RecoveryUI::ERROR);
+      if (!ui->IsTextVisible()) {
+        sleep(5);
+      }
     }
   }
 
@@ -987,17 +1026,26 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
   //  - In all other cases, reboot the device. Therefore, normal users will observe the device
   //    rebooting a) immediately upon successful finish (INSTALL_SUCCESS); or b) an "error" screen
   //    for 5s followed by an automatic reboot.
-  if (status != INSTALL_REBOOT) {
-    if (status == INSTALL_NONE || ui->IsTextVisible()) {
-      Device::BuiltinAction temp = prompt_and_wait(device, status);
-      if (temp != Device::NO_ACTION) {
-        next_action = temp;
+  if(exit_from_factory)
+  {
+    printf("exit from pcba okay exit_from_factory=%d \n", exit_from_factory);
+  }else{
+    if (status != INSTALL_REBOOT) {
+      if (status == INSTALL_NONE || ui->IsTextVisible()) {
+        Device::BuiltinAction temp = prompt_and_wait(device, status);
+        if (temp != Device::NO_ACTION) {
+          next_action = temp;
+        }
       }
     }
   }
 
   // Save logs and clean up before rebooting or shutting down.
   finish_recovery();
+
+  if(exit_from_factory){
+    exit_factory_mode_wipe_cmd_in_bcb();
+  }
 
   return next_action;
 }

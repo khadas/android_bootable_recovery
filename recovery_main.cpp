@@ -59,6 +59,8 @@
 #include "recovery_ui/device.h"
 #include "recovery_ui/stub_ui.h"
 #include "recovery_ui/ui.h"
+#include "rkutility/rktools.h"
+
 
 static constexpr const char* COMMAND_FILE = "/cache/recovery/command";
 static constexpr const char* LOCALE_FILE = "/cache/recovery/last_locale";
@@ -223,7 +225,7 @@ static void ListenRecoverySocket(RecoveryUI* ui, std::atomic<Device::BuiltinActi
     ui->InterruptKey();
   }
 }
-
+#ifdef LogToCache
 static void redirect_stdio(const char* filename) {
   android::base::unique_fd pipe_read, pipe_write;
   // Create a pipe that allows parent process sending logs over.
@@ -309,6 +311,7 @@ static void redirect_stdio(const char* filename) {
     }
   }
 }
+#endif
 
 int main(int argc, char** argv) {
   // We don't have logcat yet under recovery; so we'll print error on screen and log to stdout
@@ -328,9 +331,22 @@ int main(int argc, char** argv) {
 
   // redirect_stdio should be called only in non-sideload mode. Otherwise we may have two logger
   // instances with different timestamps.
+#ifdef LogToCache
   redirect_stdio(Paths::Get().temporary_log_file().c_str());
+#endif
+
+#ifdef LogToSerial
+  char *SerialName = getSerial();
+  freopen(SerialName, "a", stdout); setbuf(stdout, NULL);
+  freopen(SerialName, "a", stderr); setbuf(stderr, NULL);
+  free(SerialName);
+#endif
+
 
   load_volume_table();
+
+  setFlashPoint();
+
   has_cache = volume_for_mount_point(CACHE_ROOT) != nullptr;
 
   std::vector<std::string> args = get_args(argc, argv);
