@@ -28,7 +28,7 @@
 // 16K - 64K    Used by uncrypt and recovery to store wipe_package for A/B devices
 // Note that these offsets are admitted by bootloader,recovery and uncrypt, so they
 // are not configurable without changing all of them.
-constexpr size_t BOOTLOADER_MESSAGE_OFFSET_IN_MISC = 0;
+constexpr size_t BOOTLOADER_MESSAGE_OFFSET_IN_MISC = 16 * 1024;
 constexpr size_t VENDOR_SPACE_OFFSET_IN_MISC = 2 * 1024;
 constexpr size_t WIPE_PACKAGE_OFFSET_IN_MISC = 16 * 1024;
 
@@ -73,11 +73,13 @@ struct bootloader_message {
     // expansion.
     char stage[32];
 
+    //return update parameter flag
+    char parameter[32];
     // The 'reserved' field used to be 224 bytes when it was initially
     // carved off from the 1024-byte recovery field. Bump it up to
     // 1184-byte so that the entire bootloader_message struct rounds up
     // to 2048-byte.
-    char reserved[1184];
+    char reserved[1152];
 };
 
 /**
