@@ -50,6 +50,9 @@ updater_common_static_libraries := \
     libcutils \
     libutils \
     libtune2fs \
+    libmtdutils \
+    librkutility	\
+    librkupdate \
     $(tune2fs_static_libraries)
 
 # updater (static executable)

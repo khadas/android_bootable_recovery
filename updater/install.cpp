@@ -63,6 +63,9 @@
 #include "otautil/print_sha1.h"
 #include "otautil/sysutil.h"
 #include "updater/updater.h"
+#include "rkupdate/Upgrade.h"
+
+const char* g_package_file;
 
 // Send over the buffer to recovery though the command pipe.
 static void uiPrint(State* state, const std::string& buffer) {
@@ -909,6 +912,97 @@ Value* Tune2FsFn(const char* name, State* state, const std::vector<std::unique_p
   return StringValue("t");
 }
 
+Value* WriteRawLoaderImageFn(const char* name, State* state, const std::vector<std::unique_ptr<Expr>>& argv) {
+    bool bRet = false;
+    printf("Start to update loader from update.zip\n");
+    std::string loader_bin("/tmp/RKLoader.bin");
+    void *pCallback = NULL;
+    void *pProgressCallback = NULL;
+    char *szBootDev = NULL;
+
+	(void)name; (void)state; (void)argv;
+    if(access(loader_bin.c_str(), F_OK) == 0){
+		printf("/tmp/RKLoader.bin access.\n");
+		bRet= do_rk_firmware_upgrade((char *)loader_bin.c_str(), pCallback, pProgressCallback, szBootDev);
+    }else{
+		bRet = false;
+		printf("ERROR:/tmp/RKLoader.bin cannot access.\n");
+    }
+    return StringValue(strdup(bRet ? "t" : ""));
+}
+
+//update the GPT:parameter partition
+Value* WriteRawGptParameterImageFn(const char* name, State* state, const std::vector<std::unique_ptr<Expr>>& argv) {
+    bool bRet = false;
+    printf("Start to update parameter from update.zip\n");
+    std::string parameter_path("/tmp/parameter");
+    void *pCallback = NULL;
+    void *pProgressCallback = NULL;
+    char *szBootDev = NULL;
+    struct bootloader_message boot;
+   // char const*partition = "parameter";
+    char cmd[100] = "recovery\n--update_package=";
+    std::string sflag;
+    std::string err;
+
+	(void)name; (void)argv;
+    if (!read_bootloader_message(&boot, &err)) {
+      LOG(ERROR)  << "\": " << err;
+      return StringValue("");
+    }
+    sflag = std::string(boot.parameter);
+    if(sflag == "yes")
+    {
+        printf("parameter has been upgraded!!! ==== %s\n",sflag.c_str());
+        bRet = true;
+        goto done;
+    }
+    else
+        printf("parameter  upgraded!!! ==== %s\n",sflag.c_str());
+    if(access(parameter_path.c_str(), F_OK) == 0){
+	printf("/tmp/parameter access.\n");
+	bRet= do_rk_gpt_update((char *)parameter_path.c_str(), pCallback, pProgressCallback, szBootDev);
+      if(!bRet){
+        printf("update parameter fail!!!");
+        goto done;
+      }
+    }else{
+	bRet = false;
+	printf("ERROR:/tmp/parameter cannot access.\n");
+    }
+    printf("WriteRawGptParameterImageFn:the package path is %s\n", g_package_file);
+    memset(&boot, 0, sizeof(boot));
+    strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
+    strcat(cmd, g_package_file);
+    strlcpy(boot.recovery, cmd, sizeof(boot.recovery));
+    strlcpy(boot.parameter,"yes",sizeof(boot.parameter));
+    //set_bootloader_message(&boot);
+    if(!write_bootloader_message(boot, &err)){
+        LOG(ERROR)  << "\": " << err;
+        printf("write_bootloader_message ERROR --- %s\n", err.c_str());
+        goto done;
+    }
+    printf("update parameter success, reboot now...\n");
+    //android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+    //property_set(ANDROID_RB_PROPERTY, "reboot,recovery");
+    reboot("reboot,recovery");
+    for(int i = 0; i < 10; i++){
+        sleep(2);
+        printf("stop here, waitting for reboot.\n");
+    }
+done:
+    //format_volume
+    fprintf(((UpdaterInfo*)(state->cookie))->cmd_pipe, "wipe_all\n");
+    return StringValue(strdup(bRet ? "t" : ""));
+}
+
+void RegisterPackageFile(const char* pPackageFile)
+{
+	printf("RegisterPackageFile.\n");
+	g_package_file = pPackageFile;
+	printf("RegisterPackageFile. g_package_file=%s \n", g_package_file);
+}
+
 void RegisterInstallFunctions() {
   RegisterFunction("mount", MountFn);
   RegisterFunction("is_mounted", IsMountedFn);
@@ -942,4 +1036,6 @@ void RegisterInstallFunctions() {
 
   RegisterFunction("enable_reboot", EnableRebootFn);
   RegisterFunction("tune2fs", Tune2FsFn);
+  RegisterFunction("write_raw_loader_image", WriteRawLoaderImageFn);
+  RegisterFunction("write_raw_gpt_parameter", WriteRawGptParameterImageFn);
 }

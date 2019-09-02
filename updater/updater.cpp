@@ -88,6 +88,8 @@ int main(int argc, char** argv) {
   // Extract the script from the package.
 
   const char* package_filename = argv[3];
+  RegisterPackageFile(package_filename);
+ 
   MemMapping map;
   if (!map.MapFile(package_filename)) {
     LOG(ERROR) << "failed to map package " << argv[3];

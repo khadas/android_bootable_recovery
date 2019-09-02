@@ -54,6 +54,7 @@ cc_defaults {
         "libext2_uuid",
         "libext2_e2p",
         "libext2fs",
+        "librkupdate",
     ],
 }
 
