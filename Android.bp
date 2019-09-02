@@ -73,6 +73,9 @@ cc_defaults {
         "librecovery_fastboot",
         "libminui",
         "libotautil",
+        "libmtdutils",
+        "librkutility",
+        "librkupdate",
 
         // external dependencies
         "libhealthhalutils",
@@ -124,6 +127,7 @@ cc_binary {
         "librecovery_ui_default",
         "libmtdutils",
         "librkutility",
+        "librkupdate",
     ],
 
     required: [

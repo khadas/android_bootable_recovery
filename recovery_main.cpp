@@ -60,12 +60,18 @@
 #include "recovery_ui/stub_ui.h"
 #include "recovery_ui/ui.h"
 #include "rkutility/rktools.h"
+#include "rkutility/sdboot.h"
+
+
 
 
 static constexpr const char* COMMAND_FILE = "/cache/recovery/command";
 static constexpr const char* LOCALE_FILE = "/cache/recovery/last_locale";
 
 static constexpr const char* CACHE_ROOT = "/cache";
+#ifdef LogToSDCard
+static const char *SDCARD_LOG_FILE = "/mnt/external_sd/recovery.log";
+#endif
 
 bool has_cache = false;
 
@@ -313,6 +319,36 @@ static void redirect_stdio(const char* filename) {
 }
 #endif
 
+std::vector<std::string> get_args_from_sd(int argc, char **argv, SDBoot* prksdboot){
+    printf("in get_args_from_sd\n");
+    std::vector<std::string> args;
+    ensure_sd_mounted(prksdboot);
+    if (!prksdboot->sdboot_get_bSDMounted())
+    {
+        printf("out get_args_from_sd:bSDMounted\n");
+        return args;
+    }
+    char configFile[64];
+    strcpy(configFile, EX_SDCARD_ROOT);
+    strcat(configFile, "/sd_boot_config.config");
+    args = prksdboot->get_sd_config(configFile, argc, argv);
+    
+    return args;
+}
+
+std::vector<std::string> get_args_rk_sd(int argc, char **argv, SDBoot* prksdboot){
+    std::vector<std::string> args;
+    if(prksdboot->isSDboot()){
+        args = get_args_from_sd(argc, argv, prksdboot);
+    }else if(prksdboot->isUSBboot()){
+        args = prksdboot->get_args_from_usb(argc, argv);
+    }else{
+        printf("ERROR: get_args failed.(%s:%d)\n", __func__, __LINE__);
+    }
+    return args;
+}
+
+
 int main(int argc, char** argv) {
   // We don't have logcat yet under recovery; so we'll print error on screen and log to stdout
   // (which is redirected to recovery.log) as we used to do.
@@ -346,11 +382,23 @@ int main(int argc, char** argv) {
   load_volume_table();
 
   setFlashPoint();
+  SDBoot rksdboot;
 
   has_cache = volume_for_mount_point(CACHE_ROOT) != nullptr;
 
-  std::vector<std::string> args = get_args(argc, argv);
+  //std::vector<std::string> args = get_args(argc, argv);
+  std::vector<std::string> args;
+  if(rksdboot.isSDboot() || rksdboot.isUSBboot()){
+    args = get_args_rk_sd(argc, argv, &rksdboot);
+  }else{
+    args = get_args(argc, argv);
+  }
   auto args_to_parse = StringVectorToNullTerminatedArray(args);
+
+#ifdef LogToSDCard
+  ensure_sd_mounted(&rksdboot);
+  redirect_stdio(SDCARD_LOG_FILE);
+#endif
 
   static constexpr struct option OPTIONS[] = {
     { "fastboot", no_argument, nullptr, 0 },
@@ -477,7 +525,7 @@ int main(int argc, char** argv) {
 
     ui->SetEnableFastbootdLogo(fastboot);
 
-    auto ret = fastboot ? StartFastboot(device, args) : start_recovery(device, args);
+    auto ret = fastboot ? StartFastboot(device, args) : start_recovery(device, args, &rksdboot);
 
     if (ret == Device::KEY_INTERRUPTED) {
       ret = action.exchange(ret);
