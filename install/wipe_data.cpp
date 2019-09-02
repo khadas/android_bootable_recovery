@@ -19,6 +19,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <functional>
 #include <vector>
@@ -32,11 +35,44 @@
 #include "otautil/roots.h"
 #include "recovery_ui/ui.h"
 
-#include "rkutility/rktools.h"
 
 constexpr const char* CACHE_ROOT = "/cache";
 constexpr const char* DATA_ROOT = "/data";
 constexpr const char* METADATA_ROOT = "/metadata";
+
+/**
+ * reset hdmi after restore factory.
+*/
+#define BASEPARAMER_PARTITION_NAME "/baseparameter"
+#define BASEPARAMER_PARTITION_SIZE 1024*1024/2
+
+int erase_baseparameter() {
+    Volume* v = volume_for_mount_point(BASEPARAMER_PARTITION_NAME);
+    if (v == NULL) {
+        printf("unknown volume baseparamer, not erase baseparamer\n");
+        return -1;
+    }
+
+    int file;
+    file = open((v->blk_device).c_str(), O_RDWR);
+    if (file < 0){
+        printf("baseparamer file can not be opened");
+        return -1;
+    }
+    lseek(file, BASEPARAMER_PARTITION_SIZE, SEEK_SET);
+
+    //size of baseparameter.
+    char buf[BASEPARAMER_PARTITION_SIZE];
+    memset(buf, 0, BASEPARAMER_PARTITION_SIZE);
+    read(file, buf, BASEPARAMER_PARTITION_SIZE);
+
+    lseek(file, 0L, SEEK_SET);
+    write(file, (char*)(&buf), BASEPARAMER_PARTITION_SIZE);
+    close(file);
+    sync();
+
+    return 0;
+}
 
 static bool EraseVolume(const char* volume, RecoveryUI* ui, bool convert_fbe) {
   bool is_cache = (strcmp(volume, CACHE_ROOT) == 0);
@@ -142,3 +178,4 @@ void WipeFrp() {
     printf("wiping frp success!\n");
   }
 }
+

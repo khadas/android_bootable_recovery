@@ -66,6 +66,8 @@ static_assert(kRecoveryApiVersion == RECOVERY_API_VERSION, "Mismatching recovery
 // Default allocation of progress bar segments to operations
 static constexpr int VERIFICATION_PROGRESS_TIME = 60;
 static constexpr float VERIFICATION_PROGRESS_FRACTION = 0.25;
+static bool bWipeAfterUpdate = false;
+
 
 static std::condition_variable finish_log_temperature;
 
@@ -472,6 +474,9 @@ static int try_update_binary(const std::string& package, ZipArchiveHandle zip, b
       } else {
         LOG(ERROR) << "invalid \"log\" parameters: " << line;
       }
+    }else if (command == "wipe_all"){
+        printf("set bWipeAfterUpdate to true.\n");
+        bWipeAfterUpdate = true;
     } else {
       LOG(ERROR) << "unknown command [" << command << "]";
     }
@@ -512,7 +517,10 @@ bool verify_package_compatibility(ZipArchiveHandle package_zip) {
   static constexpr const char* COMPATIBILITY_ZIP_ENTRY = "compatibility.zip";
   ZipString compatibility_entry_name(COMPATIBILITY_ZIP_ENTRY);
   ZipEntry compatibility_entry;
-  if (FindEntry(package_zip, compatibility_entry_name, &compatibility_entry) != 0) {
+  std::string real_product = android::base::GetProperty("ro.target.product", "unkonw");
+  bool is_ab = android::base::GetBoolProperty("ro.build.ab_update", false);
+  if (FindEntry(package_zip, compatibility_entry_name, &compatibility_entry) != 0 
+  	|| real_product.compare("box")==0 || is_ab || true) {
     LOG(INFO) << "Package doesn't contain " << COMPATIBILITY_ZIP_ENTRY << " entry";
     return true;
   }
