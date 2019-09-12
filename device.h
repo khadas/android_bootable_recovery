@@ -67,6 +67,7 @@ class Device {
     MOUNT_SYSTEM = 10,
     RUN_GRAPHICS_TEST = 11,
     RUN_LOCALE_TEST = 12,
+    RECOVERY_SYSTEM = 13,
   };
 
   // Return the list of menu items (an array of strings, NULL-terminated). The menu_position passed

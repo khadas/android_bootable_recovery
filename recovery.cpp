@@ -1253,6 +1253,13 @@ static Device::BuiltinAction prompt_and_wait(Device* device, int status) {
         screen_ui->CheckBackgroundTextImages(locale);
         break;
       }
+	  case Device::RECOVERY_SYSTEM:
+        ui->Print("Recovery Android from /backup.\n");
+        if(ensure_path_mounted("/backup") != -1){
+            bool is_wipe_cache = false;
+            int result = install_package("/backup/update.zip", &is_wipe_cache, TEMPORARY_INSTALL_FILE, false, 0/*retry_count*/);
+        }
+        break;
       case Device::MOUNT_SYSTEM:
         // For a system image built with the root directory (i.e. system_root_image == "true"), we
         // mount it to /system_root, and symlink /system to /system_root/system to make adb shell
