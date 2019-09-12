@@ -628,6 +628,21 @@ static Device::BuiltinAction prompt_and_wait(Device* device, int status) {
         }
         break;
 
+      case Device::RECOVERY_SYSTEM:
+        {
+          ui->Print("Recovery Android from /backup.\n");
+          if(ensure_path_mounted("/backup") != -1){
+            bool is_wipe_cache = false;
+            int result = install_package("/backup/update.zip", is_wipe_cache, false, 0, ui);
+            if (result != INSTALL_SUCCESS) {
+              ui->Print("Recovery Android from /backup aborted.\n");
+            }else{
+              ui->Print("Recovery Android from /backup Successful.\n");
+            }
+          }
+        }
+        break;
+
       case Device::KEY_INTERRUPTED:
         return Device::KEY_INTERRUPTED;
     }
