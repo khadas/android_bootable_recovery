@@ -67,7 +67,7 @@
 #include "cutils/properties.h"
 #include "cutils/android_reboot.h"
 
-extern char* g_package_file;
+const char* g_package_file;
 
 
 // Send over the buffer to recovery though the command pipe.
@@ -1092,6 +1092,13 @@ done:
     //format_volume
     fprintf(((UpdaterInfo*)(state->cookie))->cmd_pipe, "wipe_all\n");
     return StringValue(strdup(bRet ? "t" : ""));
+}
+
+void RegisterPackageFile(const char* pPackageFile)
+{
+	printf("RegisterPackageFile.\n");
+	g_package_file = pPackageFile;
+	printf("RegisterPackageFile. g_package_file=%s \n", g_package_file);
 }
 
 void RegisterInstallFunctions() {

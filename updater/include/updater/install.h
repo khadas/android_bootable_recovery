@@ -19,6 +19,8 @@
 
 struct State;
 
+void RegisterPackageFile(const char* _Nonnull pPackageFile);
+
 void RegisterInstallFunctions();
 
 // uiPrintf function prints msg to screen as well as logs
