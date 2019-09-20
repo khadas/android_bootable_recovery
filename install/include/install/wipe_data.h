@@ -31,4 +31,5 @@ bool WipeData(Device* device, bool convert_fbe);
 
 void SureMetadataMount();
 void WipeFrp();
+int ResizeData();
 

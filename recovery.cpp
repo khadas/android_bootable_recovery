@@ -1128,6 +1128,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
     { "fw_update", required_argument, nullptr, 'f'+'w' },
     { "factory_mode", required_argument, nullptr, 'f' },
     { "pcba_test", required_argument, nullptr, 'p'+'t' },
+    { "resize_partition", required_argument, nullptr, 'r'+'p' },
     { nullptr, 0, nullptr, 0 },
   };
 
@@ -1136,6 +1137,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
   char *sdboot_update_package = nullptr;
   bool should_wipe_data = false;
   bool should_wipe_all = false;
+  int resize_partition = 0;
   bool should_prompt_and_wipe_data = false;
   bool should_wipe_cache = false;
   bool should_wipe_ab = false;
@@ -1211,6 +1213,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
             sdboot_update_package = strdup(optarg);
         }
         break;
+      case 'r'+'p': { resize_partition = 1; printf("resize_partition = 1!\n");} break;
       case '?':
         LOG(ERROR) << "Invalid command argument";
         continue;
@@ -1349,11 +1352,21 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
         }else{
             bAutoUpdateComplete = true;
         }
-  } else if (should_wipe_data) {
+  } else if (should_wipe_data || resize_partition) {
     save_current_log = true;
     bool convert_fbe = reason && strcmp(reason, "convert_fbe") == 0;
-    if (!WipeData(device, convert_fbe)) {
-      status = INSTALL_ERROR;
+    if (resize_partition != 1){
+      printf("do WipeData \n");
+      if (!WipeData(device, convert_fbe)) {
+        status = INSTALL_ERROR;
+      }
+    }else{
+      printf("resize /data \n");
+      ui->Print("resize /data \n");
+      if (ResizeData() != 0){
+        status = INSTALL_ERROR;
+        printf("ResizeData failed! \n");
+      }
     }
     if(should_wipe_all) {
       WipeFrp();

@@ -34,6 +34,8 @@
 #include "otautil/logging.h"
 #include "otautil/roots.h"
 #include "recovery_ui/ui.h"
+#include "mtdutils/rk29.h"
+
 
 
 constexpr const char* CACHE_ROOT = "/cache";
@@ -179,3 +181,27 @@ void WipeFrp() {
   }
 }
 
+int ResizeData(){
+  Volume* v11 = volume_for_mount_point("/data");
+  int result = 0;
+
+  if (nullptr == v11){
+    printf("ResizeData failed! v11 is NULL \n");
+    return -1;
+  }
+
+  printf("ResizeData blk_device=%s \n", (v11->blk_device).c_str());
+  if(strcmp((v11->fs_type).c_str(), (char*)"f2fs") == 0){
+    if(rk_check_and_resizefs_f2fs((v11->blk_device).c_str())) {
+      printf("check and resize /data failed! blk_device=%s \n", (v11->blk_device).c_str());
+      result = -1;
+    }
+  }else{
+    if(rk_check_and_resizefs((v11->blk_device).c_str())) {
+      printf("check and resize /data failed! blk_device=%s \n", (v11->blk_device).c_str());
+      result = -1;
+    }
+  }
+
+  return result;
+}
