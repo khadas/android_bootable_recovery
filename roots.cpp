@@ -41,6 +41,7 @@
 
 #include "mounts.h"
 #include "rktools.h"
+#include "mtdutils/rk29.h"
 
 static struct fstab* fstab = nullptr;
 
@@ -569,4 +570,21 @@ int setup_install_mounts() {
     }
   }
   return 0;
+}
+
+int ResizeData(void){
+  int result = 0;
+  Volume* v11 = volume_for_path("/data");
+  if(strcmp(v11->fs_type, "f2fs") == 0){
+    if(rk_check_and_resizefs_f2fs(v11->blk_device)) {
+      printf("check and resize /data failed!\n");
+      result = -1;
+    }
+  }else{
+    if(rk_check_and_resizefs(v11->blk_device)) {
+      result = -1;
+    }
+  }
+
+  return result;
 }

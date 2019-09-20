@@ -97,6 +97,7 @@ static const struct option OPTIONS[] = {
   { "fw_update", required_argument, NULL, 'f'+'w' },
   { "factory_mode", required_argument, NULL, 'f' },
   { "pcba_test", required_argument, NULL, 'p'+'t' },
+  { "resize_partition", required_argument, NULL, 'r'+'p' },
   { NULL, 0, NULL, 0 },
 };
 
@@ -1613,6 +1614,8 @@ int main(int argc, char **argv) {
   int arg;
   int option_index;
 	int exit_from_factory = 0;
+  int resize_partition = 0;
+
   while ((arg = getopt_long(args_to_parse.size(), args_to_parse.data(), "", OPTIONS,
                             &option_index)) != -1) {
     switch (arg) {
@@ -1672,6 +1675,7 @@ int main(int argc, char **argv) {
                 sdboot_update_package = strdup(optarg);
             }
             break;
+        case 'r'+'p': { resize_partition = 1; printf("resize_partition = 1!\n");} break;
         case '?':
             LOG(ERROR) << "Invalid command argument";
             continue;
@@ -1848,9 +1852,19 @@ int main(int argc, char **argv) {
             bWipeAfterUpdate = true;
             #endif
         }
-    } else if (should_wipe_data) {
-    if (!wipe_data(device)) {
-      status = INSTALL_ERROR;
+  } else if (should_wipe_data || resize_partition) {
+    if (resize_partition != 1){
+      printf("do wipe_data \n");
+      if (!wipe_data(device)) {
+        status = INSTALL_ERROR;
+      }
+    }else{
+       printf("resize /data \n");
+       ui->Print("resize /data \n");
+       if (ResizeData() != 0){
+          status = INSTALL_ERROR;
+          printf("ResizeData failed! \n");
+        }
     }
 	if(should_wipe_all) {
           printf("begin to wipe frp partion!\n");
