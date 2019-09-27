@@ -1469,12 +1469,13 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
   }
 
   check_device_remove(prksdboot);
-  printf("recovery_main before finish_recovery() \n");
-  // Save logs and clean up before rebooting or shutting down.
-  finish_recovery();
 
-  if(exit_from_factory){
+  if (exit_from_factory){
     exit_factory_mode_wipe_cmd_in_bcb();
+  } else {
+    printf("recovery_main before finish_recovery() \n");
+    // Save logs and clean up before rebooting or shutting down.
+    finish_recovery();
   }
 
   return next_action;
