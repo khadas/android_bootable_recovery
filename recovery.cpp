@@ -1974,12 +1974,13 @@ int main(int argc, char **argv) {
         wipe_data(device);
     }
     rksdboot.check_device_remove();
-  // Save logs and clean up before rebooting or shutting down.
-  finish_recovery();
 	if(exit_from_factory)
 	{
 		exit_factory_mode_wipe_cmd_in_bcb();
-	}
+	} else {
+        // Save logs and clean up before rebooting or shutting down.
+        finish_recovery();
+    }
 
   switch (after) {
     case Device::SHUTDOWN:
