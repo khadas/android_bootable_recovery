@@ -787,26 +787,29 @@ static int exit_factory_mode_wipe_cmd_in_bcb(void)
   return 0;
 }
 
-static void handle_upgrade_callback(char *szPrompt)
-{  
-	(void)szPrompt;
-    if (ui){
-        //ui->Print(szPrompt);
-        ui->Print("\n");
-    }  
-}  
+RecoveryUI* pCallbackUI = NULL;
+
+static void handle_upgrade_callback(const char* fmt, ...)
+{
+  if (pCallbackUI){
+    va_list ap;
+    va_start(ap, fmt);
+    pCallbackUI->PrintV(fmt, true, ap);
+    va_end(ap);
+  }
+}
 static void handle_upgrade_progress_callback(float portion, float seconds)
-{  
-    if (ui){
-        if (seconds==0)
-        ui->SetProgress(portion);
-        else 
-        ui->ShowProgress(portion,seconds);
-    }  
-} 
+{
+  if (pCallbackUI){
+    if (seconds==0)
+      pCallbackUI->SetProgress(portion);
+    else
+      pCallbackUI->ShowProgress(portion,seconds);
+  }
+}
 
 
-int do_sd_mode_update(const char *pFile, SDBoot* prksdboot){
+int do_sd_mode_update(const char *pFile, SDBoot* prksdboot, RecoveryUI* ui){
     //status=INSTALL_SUCCESS;
     prksdboot->sdboot_set_status(INSTALL_SUCCESS);
     bool bRet,bUpdateIDBlock=true;
@@ -829,6 +832,7 @@ int do_sd_mode_update(const char *pFile, SDBoot* prksdboot){
     ui->SetBackground(RecoveryUI::INSTALLING_UPDATE);
     ui->SetProgressType(RecoveryUI::DETERMINATE);
     printf("start sd upgrade...\n");
+    ui->Print("start sd upgrade...\n");
 
     #ifdef USE_BOARD_ID
     //ensure_path_mounted("/cust");
@@ -854,42 +858,47 @@ int do_sd_mode_update(const char *pFile, SDBoot* prksdboot){
         custom();
         #endif
         //status = INSTALL_SUCCESS;
-		prksdboot->sdboot_set_status(INSTALL_SUCCESS);
+        prksdboot->sdboot_set_status(INSTALL_SUCCESS);
         //bAutoUpdateComplete=true;
         printf("SD upgrade ok.\n");
+        ui->Print("SD upgrade ok.\n");
     }
 
     //return status;
 	return prksdboot->sdboot_get_status();
 }
 
-int do_usb_mode_update(const char *pFile, SDBoot* prksdboot){
-	(void)pFile;
+int do_usb_mode_update(const char *pFile, SDBoot* prksdboot, RecoveryUI* ui){
+    (void)pFile;(void)ui;
     //return status;
     return prksdboot->sdboot_get_status();
 }
-int do_rk_mode_update(const char *pFile, SDBoot* prksdboot){
+int do_rk_mode_update(const char *pFile, SDBoot* prksdboot, RecoveryUI* ui){
     //bUpdateModel = true;
     int ret = 0;
-	prksdboot->sdboot_set_bUpdateModel(true);
+    prksdboot->sdboot_set_bUpdateModel(true);
+    pCallbackUI = ui;
     if (/*bSDBoot*/prksdboot->sdboot_get_bSDBoot()){
         printf("SDBoot do_rk_mode_update\n");
-        ret = do_sd_mode_update(pFile, prksdboot);
+        ui->Print("SDBoot do_rk_mode_update\n");
+        ret = do_sd_mode_update(pFile, prksdboot, ui);
     }else if(/*bUsbBoot*/prksdboot->sdboot_get_bUsbBoot()){
         printf("UsbBoot do_rk_mode_update\n");
-        ret = do_usb_mode_update(pFile, prksdboot);
+        ui->Print("UsbBoot do_rk_mode_update\n");
+        ret = do_usb_mode_update(pFile, prksdboot, ui);
     }
-	prksdboot->sdboot_set_status(ret);
+    prksdboot->sdboot_set_status(ret);
     return ret;
 }
 
-int do_rk_direct_sd_update(const char *pFile, SDBoot* prksdboot){
+int do_rk_direct_sd_update(const char *pFile, SDBoot* prksdboot, RecoveryUI* ui){
     //bUpdateModel = true;
     int ret = 0;
-	prksdboot->sdboot_set_bUpdateModel(true);
-	printf("enter do_rk_direct_sd_update!\n");
-    ret = do_sd_mode_update(pFile, prksdboot);
-	prksdboot->sdboot_set_status(ret);
+    prksdboot->sdboot_set_bUpdateModel(true);
+    printf("enter do_rk_direct_sd_update!\n");
+    ui->Print("enter do_rk_direct_sd_update!\n");
+    ret = do_sd_mode_update(pFile, prksdboot, ui);
+    prksdboot->sdboot_set_status(ret);
     return ret;
 }
 
@@ -924,12 +933,12 @@ void checkUSBRemoved(SDBoot* prksdboot) {
     }
 }
 
-void check_device_remove(SDBoot* prksdboot){
+void check_device_remove(SDBoot* prksdboot, RecoveryUI* ui){
     if (/*bSDBoot*/prksdboot->sdboot_get_bSDBoot()){
         ui->ShowText(true);
         if (/*status*/ prksdboot->sdboot_get_status() == INSTALL_SUCCESS)
             ui->Print("Doing Actions succeeded.please remove the sdcard......\n");
-        else 
+        else
             ui->Print("Doing Actions failed!please remove the sdcard......\n");
         if (/*bSDMounted*/prksdboot->sdboot_get_bSDMounted())
             checkSDRemoved();
@@ -938,7 +947,7 @@ void check_device_remove(SDBoot* prksdboot){
         ui->ShowText(true);
         if (/*status*/ prksdboot->sdboot_get_status() == INSTALL_SUCCESS)
             ui->Print("Doing Actions succeeded.please remove the usb disk......\n");
-        else 
+        else
             ui->Print("Doing Actions failed!please remove the usb disk......\n");
         if (/*bUsbMounted*/prksdboot->sdboot_get_bUsbMounted())
             checkUSBRemoved(prksdboot);
@@ -949,12 +958,15 @@ void check_device_remove(SDBoot* prksdboot){
         sync();
         //property_set(ANDROID_RB_PROPERTY, "reboot,");
         printf("check_device_remove sd update, waiting for reboot........ \n");
-		reboot("reboot,");
-		for(int i = 0; i < 20; i++){
-        	sleep(2);
-        	printf("stop here, waitting for reboot.\n");
-    	}
-		printf("check_device_remove sd update, reboot failed! \n");
+        ui->Print("check_device_remove sd update, waiting for reboot........ \n");
+        reboot("reboot,");
+        for(int i = 0; i < 20; i++){
+          sleep(2);
+          printf("stop here, waitting for reboot.\n");
+          ui->Print("stop here, waitting for reboot.\n");
+        }
+        printf("check_device_remove sd update, reboot failed! \n");
+        ui->Print("check_device_remove sd update, reboot failed! \n");
     }
 }
 
@@ -968,14 +980,16 @@ void ensure_sd_mounted(SDBoot* prksdboot){
         }else {
             printf("delay 1sec\n");
             sleep(1);
-        } 
-    }    
+        }
+    }
 }
 
-char* check_media_package(const char *path, SDBoot* prksdboot){
+char* check_media_package(const char *path, SDBoot* prksdboot, RecoveryUI* ui){
     char *reallyPath;
     //SDBoot mountDevice;
 
+    printf("check_media_package path=%s .\n", path);
+    ui->Print("check_media_package path=%s .\n", path);
     if(strncmp(path, (char*)"/mnt/external_sd", 16) == 0){
         ensure_sd_mounted(prksdboot);
     }else if(strncmp(path, (char*)"/mnt/usb_storage", 16) == 0){
@@ -984,6 +998,7 @@ char* check_media_package(const char *path, SDBoot* prksdboot){
 
     if(strncmp(path, (char*)"/mnt/media_rw", 13) == 0){
         printf("start to find package in /mnt/usb_storage/ .\n");
+        ui->Print("start to find package in /mnt/usb_storage/ .\n");
         reallyPath = (char*)malloc(PATH_LEN);
         prksdboot->ensure_usb_mounted();
         memset(reallyPath, 0, PATH_LEN);
@@ -994,18 +1009,22 @@ char* check_media_package(const char *path, SDBoot* prksdboot){
             filename = strstr(path, "update.img");
         if(filename == NULL){
             printf("check_media_package: filename is null\n");
+            ui->Print("check_media_package: filename is null\n");
             free(reallyPath);
             reallyPath = NULL;
             return NULL;
         }
 
-        strcat(reallyPath, filename); 
+        strcat(reallyPath, filename);
         if((access(reallyPath, F_OK))==0)
         {
             printf("check_media_package: find package ok is %s.\n", reallyPath);
+            ui->Print("check_media_package: find package ok is %s.\n", reallyPath);
             return reallyPath;
         }
-        
+
+        printf("start to find package in /mnt/external_sd .\n");
+        ui->Print("start to find package in /mnt/external_sd .\n");
         ensure_sd_mounted(prksdboot);
         memset(reallyPath, 0, PATH_LEN);
         strcpy(reallyPath, sd_path);
@@ -1013,6 +1032,7 @@ char* check_media_package(const char *path, SDBoot* prksdboot){
         if((access(reallyPath, F_OK))==0)
         {
             printf("check_media_package: find package ok is %s.\n", reallyPath);
+            ui->Print("check_media_package: find package ok is %s.\n", reallyPath);
             return reallyPath;
         }
         free(reallyPath);
@@ -1041,64 +1061,71 @@ static int is_boot_from_sd(){
 
     close(fd);
 
-	printf("is_boot_from_sd is_sd_boot=%d \n", is_sd_boot);
-	return is_sd_boot;
+    printf("is_boot_from_sd is_sd_boot=%d \n", is_sd_boot);
+    return is_sd_boot;
 }
 
 
-static int try_do_sdcard_boot(int* stat, SDBoot* prksdboot)
+static int try_do_sdcard_boot(int* stat, SDBoot* prksdboot, RecoveryUI* ui)
 {
-	int is_sd_mounted = 0;
-	unsigned long i = 0;
-	int is_sdupdate = 0;
+    int is_sd_mounted = 0;
+    unsigned long i = 0;
+    int is_sdupdate = 0;
 
-	printf("enter try_do_sdcard_boot \n");
-	if(NULL == stat){
-		printf("try_do_sdcard_boot stat is NULL! \n");
-		return 0;
-	}
-	is_sd_mounted = 0;
-	is_sdupdate = 0;
-	if(is_boot_from_sd())
-	{
-		/*try mount sdcard*/
-	    for(i = 0; i < 3; i++) {
-	        if(0 == ensure_path_mounted(EX_SDCARD_ROOT)){
-	            is_sd_mounted = 1;
-	            break;
-	        }else {
-	            printf("try_do_sdcard_boot delay 1sec\n");
-	            sleep(1);
-	        }
-	    }
+    printf("enter try_do_sdcard_boot \n");
+    ui->Print("enter try_do_sdcard_boot \n");
+    if(NULL == stat){
+        printf("try_do_sdcard_boot stat is NULL! \n");
+        ui->Print("try_do_sdcard_boot stat is NULL! \n");
+        return 0;
+    }
+    is_sd_mounted = 0;
+    is_sdupdate = 0;
+    if(is_boot_from_sd())
+    {
+        /*try mount sdcard*/
+        for(i = 0; i < 3; i++) {
+            if(0 == ensure_path_mounted(EX_SDCARD_ROOT)){
+                is_sd_mounted = 1;
+                break;
+            }else {
+                printf("try_do_sdcard_boot delay 1sec\n");
+                ui->Print("try_do_sdcard_boot delay 1sec\n");
+                sleep(1);
+            }
+        }
 
-		printf("try_do_sdcard_boot is_sd_mounted=%d \n", is_sd_mounted);
-		if(is_sd_mounted)
-		{
-			/*check if it's fw_update or not*/
-			VEC_SD_CONFIG vecItem;
-			SDBoot rksdboot;
+        printf("try_do_sdcard_boot is_sd_mounted=%d \n", is_sd_mounted);
+        ui->Print("try_do_sdcard_boot is_sd_mounted=%d \n", is_sd_mounted);
+        if(is_sd_mounted)
+        {
+            /*check if it's fw_update or not*/
+            VEC_SD_CONFIG vecItem;
+            SDBoot rksdboot;
 
-			if (!rksdboot.do_direct_parse_config_file("/mnt/external_sd/sd_boot_config.config",vecItem)){
-				printf("try_do_sdcard_boot sd_parse_config_file failed \n");
-			}
-			else
-			{
-				    for (i=0;i<vecItem.size();i++) {
-				        if ((strcmp(vecItem[i].strKey.c_str(),"fw_update")==0)){
-				            if (strcmp(vecItem[i].strValue.c_str(),"0")!=0){
-								printf("try_do_sdcard_boot vecItem[i].strValue.c_str()=%s \n", vecItem[i].strValue.c_str());
-								*stat = do_rk_direct_sd_update(vecItem[i].strValue.c_str(),prksdboot);
-								is_sdupdate = 1;
-				            }
-				        }
-				    }
-			}
-		}
-	}
+            if (!rksdboot.do_direct_parse_config_file("/mnt/external_sd/sd_boot_config.config",vecItem)){
+                printf("try_do_sdcard_boot sd_parse_config_file failed \n");
+                ui->Print("try_do_sdcard_boot sd_parse_config_file failed \n");
+            }
+            else
+            {
+                for (i=0;i<vecItem.size();i++) {
+                    if ((strcmp(vecItem[i].strKey.c_str(),"fw_update")==0)){
+                        if (strcmp(vecItem[i].strValue.c_str(),"0")!=0){
+                            printf("try_do_sdcard_boot vecItem[i].strValue.c_str()=%s \n", vecItem[i].strValue.c_str());
+                            ui->Print("try_do_sdcard_boot vecItem[i].strValue.c_str()=%s \n", vecItem[i].strValue.c_str());
+                            *stat = do_rk_direct_sd_update(vecItem[i].strValue.c_str(),prksdboot, ui);
+                            is_sdupdate = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-	printf("try_do_sdcard_boot is done,  is_sdupdate=%d *stat=%d \n", is_sdupdate, *stat);
-	return is_sdupdate;
+    printf("try_do_sdcard_boot is done,  is_sdupdate=%d *stat=%d \n", is_sdupdate, *stat);
+    ui->Print("try_do_sdcard_boot is done,  is_sdupdate=%d *stat=%d \n", is_sdupdate, *stat);
+    return is_sdupdate;
 }
 
 
@@ -1305,12 +1332,25 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
         set_retry_bootloader_message(retry_count + 1, args);
       }
 
-      const char *reallyPath = check_media_package(update_package, prksdboot);
+      ui->Print("check_media_package...\n");
+      const char *reallyPath = check_media_package(update_package, prksdboot, ui);
       if(reallyPath == NULL){
         reallyPath = update_package;
       }
 	  printf("start_recovery reallyPath=%s after check_media_package \n", reallyPath);
-      status = install_package(reallyPath, should_wipe_cache, true, retry_count, ui);
+      ui->Print("start_recovery reallyPath=%s after check_media_package \n", reallyPath);
+      if((strncmp(reallyPath,(char*)EX_SDCARD_ROOT, strlen((char*)EX_SDCARD_ROOT)) == 0) || (strncmp(reallyPath,(char*)USB_ROOT, strlen((char*)USB_ROOT)) == 0))
+      {
+        printf("install_package from sdcard or usb, reallyPath=%s \n", reallyPath);
+        ui->Print("install_package from sdcard or usb, reallyPath=%s \n", reallyPath);
+        status = install_package(reallyPath, should_wipe_cache, false, retry_count, ui);
+      }
+      else
+      {
+        printf("install_package from block.map, reallyPath=%s \n", reallyPath);
+        ui->Print("install_package from block.map, reallyPath=%s \n", reallyPath);
+        status = install_package(reallyPath, should_wipe_cache, true, retry_count, ui);
+      }
       if (status != INSTALL_SUCCESS) {
         ui->Print("Installation aborted.\n");
 
@@ -1345,11 +1385,15 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
     }
   }else if (sdboot_update_package != nullptr) {
         printf("bSDBoot = %d, sdboot_update_package=%s\n", prksdboot->isSDboot(), sdboot_update_package);
-        status = do_rk_mode_update(sdboot_update_package, prksdboot);
+        ui->Print("bSDBoot = %d, sdboot_update_package=%s\n", prksdboot->isSDboot(), sdboot_update_package);
+        status = do_rk_mode_update(sdboot_update_package, prksdboot, ui);
         if (status != INSTALL_SUCCESS){
-			printf("prksdboot->do_rk_mode_update failed! status =%d \n", status);
+            printf("prksdboot->do_rk_mode_update failed! status =%d \n", status);
+            ui->Print("prksdboot->do_rk_mode_update failed! status =%d \n", status);
             bAutoUpdateComplete = false;
         }else{
+            printf("prksdboot->do_rk_mode_update Successful! \n");
+            ui->Print("prksdboot->do_rk_mode_update Successful! \n");
             bAutoUpdateComplete = true;
         }
   } else if (should_wipe_data || resize_partition) {
@@ -1418,18 +1462,19 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
       status = INSTALL_ERROR;
     }
   } else if (!just_exit) {
-    if (try_do_sdcard_boot(&status, prksdboot)){
+    if (try_do_sdcard_boot(&status, prksdboot, ui)){
         printf("try_do_sdcard_boot is actually do sdupdate status=%d \n", status);
-	}else{
-	    // If this is an eng or userdebug build, automatically turn on the text display if no command
-	    // is specified. Note that this should be called before setting the background to avoid
-	    // flickering the background image.
-	    if (is_ro_debuggable()) {
-	      ui->ShowText(true);
-	    }
-	    status = INSTALL_NONE;  // No command specified
-	    ui->SetBackground(RecoveryUI::NO_COMMAND);
-	}
+        ui->Print("try_do_sdcard_boot is actually do sdupdate status=%d \n", status);
+    }else{
+        // If this is an eng or userdebug build, automatically turn on the text display if no command
+        // is specified. Note that this should be called before setting the background to avoid
+        // flickering the background image.
+        if (is_ro_debuggable()) {
+            ui->ShowText(true);
+        }
+        status = INSTALL_NONE;  // No command specified
+        ui->SetBackground(RecoveryUI::NO_COMMAND);
+    }
   }
 
   if(exit_from_factory)
@@ -1468,7 +1513,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
     }
   }
 
-  check_device_remove(prksdboot);
+  check_device_remove(prksdboot, ui);
 
   if (exit_from_factory){
     exit_factory_mode_wipe_cmd_in_bcb();

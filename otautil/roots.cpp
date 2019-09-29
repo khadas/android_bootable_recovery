@@ -45,6 +45,9 @@
 #include "otautil/mounts.h"
 #include "otautil/sysutil.h"
 #include "rkutility/rktools.h"
+#include "rkutility/sdboot.h"
+#include "otautil/roots.h"
+
 
 
 using android::fs_mgr::Fstab;
@@ -86,14 +89,12 @@ int ensure_path_mounted(const std::string& path) {
   const char* mount_point = nullptr;
   printf("ensure_path_mounted path=%s \n", path.c_str());
   // Mount at the default mount point.
-  //return android::fs_mgr::EnsurePathMounted(&fstab, path) ? 0 : -1;
-  bool fs_ret = android::fs_mgr::EnsurePathMounted(&fstab, path);
-  if(fs_ret){
-  	printf("ensure_path_mounted path=%s Successful!\n", path.c_str());
-  	return 0;
+  if(strncmp(path.c_str(),(char*)EX_SDCARD_ROOT, strlen((char*)EX_SDCARD_ROOT)) != 0)
+  {
+    return android::fs_mgr::EnsurePathMounted(&fstab, path) ? 0 : -1;
   }
   else{
-  	printf("ensure_path_mounted fs_mgr mount failed, path=%s \n", path.c_str());
+    printf("ensure_path_mounted sdcard, path=%s \n", path.c_str());
 	v = volume_for_mount_point(path);
 	if (!v) {
 		bool is_ab = android::base::GetBoolProperty("ro.build.ab_update", false);
@@ -286,30 +287,25 @@ int ensure_path_mounted(const std::string& path) {
 }
 
 int ensure_path_unmounted(const std::string& path) {
-  //return android::fs_mgr::EnsurePathUnmounted(&fstab, path) ? 0 : -1;
-  bool fs_ret = android::fs_mgr::EnsurePathUnmounted(&fstab, path);
-  if(fs_ret){
-  	printf("ensure_path_unmounted path=%s Successful!\n", path.c_str());
-  	return 0;
+  if(strncmp(path.c_str(), (char*)"/mnt/system", strlen((char*)"/mnt/system")) != 0)
+  {
+    return android::fs_mgr::EnsurePathUnmounted(&fstab, path) ? 0 : -1;
   }else{
-  	printf("ensure_path_unmounted is failed, and  path is %s\n",path.c_str());
+    printf("ensure_path_unmounted /mnt/system,  path is %s\n",path.c_str());
 	MountedVolume* mv;
-	if(strcmp(path.c_str(), (char*)"/system_root") == 0)
-	{
-	  if (!scan_mounted_volumes()) {
-	    LOG(ERROR) << "Failed to scan mounted volumes";
-		printf("ensure_path_unmounted, Failed to scan mounted volumes! \n");
-	    return -1;
-	  }
-	  mv = find_mounted_volume_by_mount_point(path.c_str());
-	  if (mv == nullptr) {
-	    // Volume is already unmounted.
-	    printf("Volume is already unmounted\n");
-	    return 0;
-	  }
+    if (!scan_mounted_volumes()) {
+      LOG(ERROR) << "Failed to scan mounted volumes";
+      printf("ensure_path_unmounted, Failed to scan mounted volumes! \n");
+      return -1;
+    }
+    mv = find_mounted_volume_by_mount_point(path.c_str());
+    if (mv == nullptr) {
+      // Volume is already unmounted.
+      printf("Volume is already unmounted\n");
+      return 0;
+    }
 
-	  return unmount_mounted_volume(mv);
-	}
+    return unmount_mounted_volume(mv);
   }
 
   printf("Reach end of ensure_path_unmounted, unmount failed!\n");
@@ -358,7 +354,13 @@ static int64_t get_file_size(int fd, uint64_t reserve_len) {
 }
 
 int format_volume(const std::string& volume, const std::string& directory) {
-  const FstabEntry* v = android::fs_mgr::GetEntryForPath(&fstab, volume);
+  const FstabEntry* v = nullptr;
+  std::string system_root = get_system_root();
+  if(volume == "/"){
+    v = android::fs_mgr::GetEntryForPath(&fstab, system_root);
+  }else{
+    v = android::fs_mgr::GetEntryForPath(&fstab, volume);
+  }
   if (v == nullptr) {
     LOG(ERROR) << "unknown volume \"" << volume << "\"";
     return -1;
@@ -373,18 +375,18 @@ int format_volume(const std::string& volume, const std::string& directory) {
   }
 
   if(volume == "/") {
-      if (ensure_path_unmounted("/system_root") != 0) {
-        LOG(ERROR) << "format_volume: Failed to unmount \"" << "/system_root" << "\"";
-		printf("format_volume: Failed to unmount /system_root \n");
-        return -1; 
-      }
+    if (ensure_path_unmounted("/mnt/system") != 0) {
+      LOG(ERROR) << "format_volume: Failed to unmount \"" << "/mnt/system" << "\"";
+      printf("format_volume: Failed to unmount /mnt/system \n");
+      return -1;
+    }
   }
   else
   {
-	  if (ensure_path_unmounted(volume) != 0) {
-	    LOG(ERROR) << "format_volume: Failed to unmount \"" << v->mount_point << "\"";
-	    return -1;
-	  }
+    if (ensure_path_unmounted(volume) != 0) {
+      LOG(ERROR) << "format_volume: Failed to unmount \"" << v->mount_point << "\"";
+      return -1;
+    }
   }
   if (v->mount_point != "/frp" && v->fs_type != "ext4" && v->fs_type != "f2fs") {
     LOG(ERROR) << "format_volume: fs_type \"" << v->fs_type << "\" unsupported";
@@ -525,6 +527,10 @@ int setup_install_mounts() {
         return -1;
       }
     } else {
+      if((strncmp(entry.mount_point.c_str(),(char*)EX_SDCARD_ROOT, strlen((char*)EX_SDCARD_ROOT)) == 0) || (strncmp(entry.mount_point.c_str(),(char*)USB_ROOT, strlen((char*)USB_ROOT)) == 0))
+      {
+        continue;
+      }
       if (ensure_path_unmounted(entry.mount_point) != 0) {
         LOG(ERROR) << "Failed to unmount " << entry.mount_point;
         return -1;
