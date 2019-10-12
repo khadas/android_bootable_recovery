@@ -470,6 +470,11 @@ void SDBoot::check_device_remove(){
         ui->Print("reboot ...\n");
         sync();
         property_set(ANDROID_RB_PROPERTY, "reboot,");
+        ui->Print("Wait rebooting .....\n");
+        printf("Wait rebooting .....");
+        while (true) {
+          pause();
+        }
     }
 }
 void SDBoot::checkSDRemoved() {
