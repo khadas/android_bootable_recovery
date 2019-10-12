@@ -271,6 +271,7 @@ private:
 	long long GetSparseImageSize(STRUCT_RKIMAGE_ITEM &entry);
 	bool IsSparseImage(STRUCT_RKIMAGE_ITEM &entry);
 	bool EraseSparseRegion(const char* volume,const char* directory);
+	bool ErasePartition(STRUCT_RKIMAGE_ITEM &entry);
 	void load_volume();
 	int getEmmc();
 	bool GetParameterGptFlag(STRUCT_RKIMAGE_ITEM &paramItem);

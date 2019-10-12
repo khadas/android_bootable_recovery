@@ -2852,6 +2852,73 @@ void CRKAndroidDevice::load_volume()
     printf("\n");
 }
 
+bool CRKAndroidDevice::ErasePartition(STRUCT_RKIMAGE_ITEM &entry)
+{
+	UINT uiLBATransferSize=(LBA_TRANSFER_SIZE)*m_uiLBATimes;
+	UINT uiLBASector = uiLBATransferSize/SECTOR_SIZE;
+	int iRet;
+	UINT uiBufferSize=uiLBATransferSize;
+	long long uifileBufferSize;
+	BYTE byRWMethod=RWMETHOD_IMAGE;
+
+
+
+	uifileBufferSize = entry.part_size * SECTOR_SIZE;
+	if (m_pLog)
+	{
+		m_pLog->Record(_T(" INFO:ErasePartition %s,offset=0x%x,size=%llu, part_size=0x%x"),entry.name,entry.flash_offset,uifileBufferSize, entry.part_size);
+	}
+
+	PBYTE pBuffer=NULL;
+	pBuffer = new BYTE[uiBufferSize];
+	if (!pBuffer)
+	{
+		if (m_pLog)
+		{
+			m_pLog->Record(_T("ERROR:ErasePartition-->New memory failed"));
+		}
+		return false;
+	}
+
+	UINT uiBegin,uiLen,uiWriteByte;
+	long long uiEntryOffset;
+	uiBegin = entry.flash_offset;
+	uiLen = 0;uiWriteByte = 0;uiEntryOffset=0;
+	while ( uifileBufferSize>0 )
+	{
+		memset(pBuffer,0,uiBufferSize);
+		if ( uifileBufferSize<uiBufferSize )
+		{
+			uiWriteByte = uifileBufferSize;
+			uiLen = ( (uiWriteByte%SECTOR_SIZE==0) ? (uiWriteByte/SECTOR_SIZE) : (uiWriteByte/SECTOR_SIZE+1) );
+		}
+		else
+		{
+			uiWriteByte = uiBufferSize;
+			uiLen = uiLBASector;
+		}
+
+		iRet = m_pComm->RKU_WriteLBA(uiBegin,uiLen,pBuffer,byRWMethod);
+		if( iRet!=ERR_SUCCESS )
+		{
+			if (m_pLog)
+			{
+				m_pLog->Record(_T("ERROR:ErasePartition-->RKU_WriteLBA failed,Written(%d),RetCode(%d)"),uiEntryOffset,iRet);
+			}
+
+			delete []pBuffer;
+			pBuffer = NULL;
+			return false;
+		}
+		uifileBufferSize -= uiWriteByte;
+		uiEntryOffset += uiWriteByte;
+		uiBegin += uiLen;
+	}
+	delete []pBuffer;
+	pBuffer = NULL;
+	return true;
+}
+
 extern int format_volume(const char* volume, const char* directory);
 bool CRKAndroidDevice::EraseSparseRegion(const char* volume,const char* directory)
 {
@@ -2995,6 +3062,7 @@ bool CRKAndroidDevice::RKA_SparseFile_Download(STRUCT_RKIMAGE_ITEM &entry,long l
 	{
 		m_pLog->Record(_T("INFO:Start to download %s,offset=0x%x,size=%llu"),entry.name,entry.flash_offset,uifileBufferSize);
 	}
+#if 0
 	//erase system partition
 	if ( !strcmp(entry.name, "system") && !EraseSparseRegion("/system",NULL))
 	{
@@ -3004,6 +3072,16 @@ bool CRKAndroidDevice::RKA_SparseFile_Download(STRUCT_RKIMAGE_ITEM &entry,long l
 		}
 		return false;
 	}
+#else
+	if(!ErasePartition(entry))
+	{
+		if (m_pLog)
+		{
+			m_pLog->Record(_T(" ERROR:RKA_SparseFile_Download-->ErasePartition failed"));
+		}
+		return false;
+	}
+#endif
 
 	BYTE byRWMethod=RWMETHOD_IMAGE;
 
