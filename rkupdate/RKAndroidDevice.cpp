@@ -3196,7 +3196,6 @@ bool CRKAndroidDevice::RKA_SparseFile_Download(STRUCT_RKIMAGE_ITEM &entry,long l
 				{
 					*(UINT *)(pBuffer + i*4) = uiFillByte;
 				}
-				uiEntryOffset += uiWriteByte;
 				iRet = m_pComm->RKU_WriteLBA(uiBegin,uiLen,pBuffer,byRWMethod);
 				if( iRet!=ERR_SUCCESS )
 				{
