@@ -1473,7 +1473,7 @@ static int is_boot_from_sd(){
 	return is_sd_boot;
 }
 
-static int try_do_sdcard_boot(int* stat)
+static int try_do_sdcard_boot(int* stat, SDBoot* prksdboot)
 {
 	int is_sd_mounted = 0;
 	unsigned long i = 0;
@@ -1504,9 +1504,8 @@ static int try_do_sdcard_boot(int* stat)
 		{
 			/*check if it's fw_update or not*/
 			VEC_SD_CONFIG vecItem;
-			
 
-			if (!rksdboot.do_direct_parse_config_file("/mnt/external_sd/sd_boot_config.config",vecItem)){
+			if (!prksdboot->do_direct_parse_config_file("/mnt/external_sd/sd_boot_config.config",vecItem)){
 				printf("try_do_sdcard_boot sd_parse_config_file failed \n");
 			}
 			else
@@ -1515,7 +1514,7 @@ static int try_do_sdcard_boot(int* stat)
 				        if ((strcmp(vecItem[i].strKey.c_str(),"fw_update")==0)){
 				            if (strcmp(vecItem[i].strValue.c_str(),"0")!=0){
 								printf("try_do_sdcard_boot vecItem[i].strValue.c_str()=%s \n", vecItem[i].strValue.c_str());
-								*stat = rksdboot.do_rk_direct_sd_update(vecItem[i].strValue.c_str());
+								*stat = prksdboot->do_rk_direct_sd_update(vecItem[i].strValue.c_str());
 								is_sdupdate = 1;
 				            }
 				        }
@@ -1919,7 +1918,7 @@ int main(int argc, char **argv) {
     // is specified. Note that this should be called before setting the background to avoid
     // flickering the background image.
 	  //try to do sdcard boot
-	  if (try_do_sdcard_boot(&status)){
+	  if (try_do_sdcard_boot(&status, &rksdboot)){
         printf("try_do_sdcard_boot is actually do sdupdate status=%d \n", status);
 	  }
 	  else
