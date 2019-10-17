@@ -869,10 +869,49 @@ int do_sd_mode_update(const char *pFile, SDBoot* prksdboot, RecoveryUI* ui){
 }
 
 int do_usb_mode_update(const char *pFile, SDBoot* prksdboot, RecoveryUI* ui){
-    (void)pFile;(void)ui;
-    //return status;
+    prksdboot->sdboot_set_status(INSTALL_SUCCESS);
+    bool bRet,bUpdateIDBlock=true;
+    char *pFwPath = (char *)malloc(100);
+    strcpy(pFwPath, USB_ROOT);
+    if (strcmp(pFile,"1")==0)
+    {
+        strcat(pFwPath, "/sdupdate.img");
+    }
+    else if (strcmp(pFile,"2")==0)
+    {
+        strcat(pFwPath, "/sdupdate.img");
+        bUpdateIDBlock = false;
+    }
+    else
+    {
+        strcat(pFwPath, pFile);
+    }
+
+    ui->SetBackground(RecoveryUI::INSTALLING_UPDATE);
+    ui->SetProgressType(RecoveryUI::DETERMINATE);
+    printf("start USB upgrade...\n");
+    ui->Print("start USB upgrade...\n");
+
+    if (bUpdateIDBlock)
+    bRet= do_rk_firmware_upgrade(pFwPath,(void *)handle_upgrade_callback,(void *)handle_upgrade_progress_callback);
+    else
+    bRet = do_rk_partition_upgrade(pFwPath,(void *)handle_upgrade_callback,(void *)handle_upgrade_progress_callback);
+    ui->SetProgressType(RecoveryUI::EMPTY);
+    if (!bRet)
+    {
+        prksdboot->sdboot_set_status(INSTALL_ERROR);
+        ui->Print("SD upgrade failed!\n");
+    }
+    else
+    {
+        prksdboot->sdboot_set_status(INSTALL_SUCCESS);
+        printf("USB upgrade ok.\n");
+        ui->Print("USB upgrade ok.\n");
+    }
+
     return prksdboot->sdboot_get_status();
 }
+
 int do_rk_mode_update(const char *pFile, SDBoot* prksdboot, RecoveryUI* ui){
     //bUpdateModel = true;
     int ret = 0;
