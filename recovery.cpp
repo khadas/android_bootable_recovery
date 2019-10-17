@@ -894,6 +894,8 @@ int do_rk_mode_update(const char *pFile, SDBoot* prksdboot, RecoveryUI* ui){
 int do_rk_direct_sd_update(const char *pFile, SDBoot* prksdboot, RecoveryUI* ui){
     //bUpdateModel = true;
     int ret = 0;
+    prksdboot->sdboot_set_bSDBoot(true);
+    prksdboot->sdboot_set_bSDMounted(true);
     prksdboot->sdboot_set_bUpdateModel(true);
     printf("enter do_rk_direct_sd_update!\n");
     ui->Print("enter do_rk_direct_sd_update!\n");
@@ -1101,9 +1103,8 @@ static int try_do_sdcard_boot(int* stat, SDBoot* prksdboot, RecoveryUI* ui)
         {
             /*check if it's fw_update or not*/
             VEC_SD_CONFIG vecItem;
-            SDBoot rksdboot;
 
-            if (!rksdboot.do_direct_parse_config_file("/mnt/external_sd/sd_boot_config.config",vecItem)){
+            if (!prksdboot->do_direct_parse_config_file("/mnt/external_sd/sd_boot_config.config",vecItem)){
                 printf("try_do_sdcard_boot sd_parse_config_file failed \n");
                 ui->Print("try_do_sdcard_boot sd_parse_config_file failed \n");
             }
