@@ -388,6 +388,45 @@ int SDBoot::do_sd_mode_update(const char *pFile){
 }
 
 int SDBoot::do_usb_mode_update(const char *pFile){
+    status=INSTALL_SUCCESS;
+    bool bRet,bUpdateIDBlock=true;
+    char *pFwPath = (char *)malloc(100);
+    strcpy(pFwPath, USB_ROOT);
+    if (strcmp(pFile,"1")==0)
+    {
+        strcat(pFwPath, "/sdupdate.img");
+    }
+    else if (strcmp(pFile,"2")==0)
+    {
+        strcat(pFwPath, "/sdupdate.img");
+        bUpdateIDBlock = false;
+    }
+    else
+    {
+        strcat(pFwPath, pFile);
+    }
+
+    ui->SetBackground(RecoveryUI::INSTALLING_UPDATE);
+    ui->SetProgressType(RecoveryUI::DETERMINATE);
+    printf("start usb upgrade...\n");
+
+
+    if (bUpdateIDBlock)
+    bRet= do_rk_firmware_upgrade(pFwPath,(void *)handle_upgrade_callback,(void *)handle_upgrade_progress_callback);
+    else
+    bRet = do_rk_partition_upgrade(pFwPath,(void *)handle_upgrade_callback,(void *)handle_upgrade_progress_callback);
+    ui->SetProgressType(RecoveryUI::EMPTY);
+    if (!bRet)
+    {
+        status = INSTALL_ERROR;
+        ui->Print("USB upgrade failed!\n");
+    }
+    else
+    {
+        status = INSTALL_SUCCESS;
+        printf("USB upgrade ok.\n");
+    }
+
     return status;
 }
 int SDBoot::do_rk_mode_update(const char *pFile){
