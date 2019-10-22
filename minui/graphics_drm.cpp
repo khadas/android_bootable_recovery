@@ -248,6 +248,8 @@ drmModeConnector* MinuiBackendDrm::FindMainMonitor(int fd, drmModeRes* resources
                                                    uint32_t* mode_index) {
   /* Look for LVDS/eDP/DSI connectors. Those are the main screens. */
   static constexpr unsigned kConnectorPriority[] = {
+    DRM_MODE_CONNECTOR_HDMIA,
+	DRM_MODE_CONNECTOR_DisplayPort,
     DRM_MODE_CONNECTOR_LVDS,
     DRM_MODE_CONNECTOR_eDP,
     DRM_MODE_CONNECTOR_DSI,
