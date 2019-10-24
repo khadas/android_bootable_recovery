@@ -153,7 +153,7 @@ std::string stage;
 const char* reason = nullptr;
 struct selabel_handle* sehandle;
 bool bWipeAfterUpdate = false;
-
+SDBoot rksdboot;
 /*
  * The recovery tool communicates with the main system through /cache files.
  *   /cache/recovery/command - INPUT - command line for tool, one arg per line
@@ -1496,7 +1496,7 @@ static int try_do_sdcard_boot(int* stat)
 		{
 			/*check if it's fw_update or not*/
 			VEC_SD_CONFIG vecItem;
-			SDBoot rksdboot;
+			
 
 			if (!rksdboot.do_direct_parse_config_file("/mnt/external_sd/sd_boot_config.config",vecItem)){
 				printf("try_do_sdcard_boot sd_parse_config_file failed \n");
@@ -1566,7 +1566,7 @@ int main(int argc, char **argv) {
 
   load_volume_table();
   setFlashPoint();
-    SDBoot rksdboot;
+    
   //todo noneed wipe cache in bringup
   has_cache = volume_for_mount_point(CACHE_ROOT) != nullptr;
 

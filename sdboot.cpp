@@ -378,6 +378,8 @@ int SDBoot::do_sd_mode_update(const char *pFile){
         custom();
         #endif
         status = INSTALL_SUCCESS;
+		bSDBoot = true;
+		bUsbMounted = true;
         //bAutoUpdateComplete=true;
         printf("SD upgrade ok.\n");
     }
@@ -402,6 +404,8 @@ int SDBoot::do_rk_mode_update(const char *pFile){
 
 int SDBoot::do_rk_direct_sd_update(const char *pFile){
     bUpdateModel = true;
+	bSDBoot = true;
+	bSDMounted = true;	
 	printf("enter do_rk_direct_sd_update!\n");
     status = do_sd_mode_update(pFile);
     return status;
