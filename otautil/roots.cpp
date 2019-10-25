@@ -236,6 +236,9 @@ int ensure_path_mounted(const std::string& path) {
                 blk_device = getenv(SD_POINT_NAME);
             }
         }
+        if(NULL == blk_device){
+            blk_device = (v->blk_device).c_str();
+        }
         int result = mount((v->blk_device).c_str(), (v->mount_point).c_str(), (v->fs_type).c_str(),
                            MS_NOATIME | MS_NODEV | MS_NODIRATIME, (char*)"shortname=mixed,utf8");
         if (result == 0) return 0;
@@ -253,6 +256,11 @@ int ensure_path_mounted(const std::string& path) {
         result = mount((v->blk_device).c_str(), (v->mount_point).c_str(), (char*)"ntfs",
                        MS_NOATIME | MS_NODEV | MS_NODIRATIME, (char*)"");
         if (result == 0) return 0;
+        if (blk_device !=nullptr){
+            result = mount(blk_device, (v->mount_point).c_str(), (char*)"ntfs",
+                           MS_NOATIME | MS_NODEV | MS_NODIRATIME, (char*)"");
+            if (result == 0) return 0;
+        }
 
         const char *sec_dev = (v->fs_options).c_str();
         if(strcmp((char*)"/mnt/external_sd", (v->mount_point).c_str()) == 0){
