@@ -28,7 +28,7 @@
 // 16K - 64K    Used by uncrypt and recovery to store wipe_package for A/B devices
 // Note that these offsets are admitted by bootloader,recovery and uncrypt, so they
 // are not configurable without changing all of them.
-constexpr size_t BOOTLOADER_MESSAGE_OFFSET_IN_MISC = 16 * 1024;
+constexpr size_t BOOTLOADER_MESSAGE_OFFSET_IN_MISC = 0 * 1024;
 constexpr size_t VENDOR_SPACE_OFFSET_IN_MISC = 2 * 1024;
 constexpr size_t WIPE_PACKAGE_OFFSET_IN_MISC = 16 * 1024;
 
