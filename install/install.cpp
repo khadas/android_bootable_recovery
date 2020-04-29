@@ -57,6 +57,9 @@
 #include "private/setup_commands.h"
 #include "recovery_ui/ui.h"
 
+#include "rkupdate/Upgrade.h"
+
+
 using namespace std::chrono_literals;
 
 static constexpr int kRecoveryApiVersion = 3;
@@ -743,4 +746,108 @@ bool verify_package(Package* package, RecoveryUI* ui) {
     return false;
   }
   return true;
+}
+
+int rkloader_bin(ZipArchiveHandle zip,const std::string& binary_path) {
+  static constexpr const char* BINARY_NAME = "RKLoader.bin";
+  ZipString binary_name(BINARY_NAME);
+  ZipEntry binary_entry;
+  if (FindEntry(zip, binary_name, &binary_entry) != 0) {
+    LOG(ERROR) << "Failed to find update binary " << BINARY_NAME;
+    return INSTALL_CORRUPT;
+  }
+
+  unlink(binary_path.c_str());
+  int fd = open(binary_path.c_str(), O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC, 0755);
+  if (fd == -1) {
+    PLOG(ERROR) << "Failed to create " << binary_path;
+    return INSTALL_ERROR;
+  }
+
+  int32_t error = ExtractEntryToFile(zip, &binary_entry, fd);
+  close(fd);
+  if (error != 0) {
+    LOG(ERROR) << "Failed to extract " << BINARY_NAME << ": " << ErrorCodeString(error);
+    return INSTALL_ERROR;
+  }
+
+  return INSTALL_SUCCESS;
+}
+
+
+static int really_install_rkloader_package(const std::string& path, bool needs_mount, RecoveryUI* ui) {
+  ui->SetBackground(RecoveryUI::INSTALLING_UPDATE);
+  ui->Print("Finding update package...\n");
+  // Give verification half the progress bar...
+  ui->SetProgressType(RecoveryUI::DETERMINATE);
+  ui->ShowProgress(VERIFICATION_PROGRESS_FRACTION, VERIFICATION_PROGRESS_TIME);
+  LOG(INFO) << "Update location: " << path;
+
+  // Map the update package into memory.
+  ui->Print("Opening update package...\n");
+
+  if (needs_mount) {
+    if (path[0] == '@') {
+      ensure_path_mounted(path.substr(1));
+    } else {
+      ensure_path_mounted(path);
+    }
+  }
+
+  auto package = Package::CreateMemoryPackage(
+      path, std::bind(&RecoveryUI::SetProgress, ui, std::placeholders::_1));
+  if (!package) {
+    LOG(ERROR) << "failed to CreateMemoryPackage kMapFileFailure ";
+    return INSTALL_CORRUPT;
+  }
+
+  // Verify package.
+  if (!verify_package(package.get(), ui)) {
+	LOG(ERROR) << "failed to verify_package kZipVerificationFailure ";
+    return INSTALL_CORRUPT;
+  }
+
+  // Try to open the package.
+  ZipArchiveHandle zip = package->GetZipArchiveHandle();
+  if (!zip) {
+	LOG(ERROR) << "failed to GetZipArchiveHandle kZipOpenFailure ";
+    return INSTALL_CORRUPT;
+  }
+
+  // Verify and install the contents of the package.
+  ui->Print("Installing update...\n");
+
+  ui->SetEnableReboot(false);
+  int result = rkloader_bin(zip, "/tmp/RKLoader.bin");
+  if (INSTALL_SUCCESS == result) {
+    void *pCallback = NULL;
+    void *pProgressCallback = NULL;
+    char *szBootDev = NULL;
+    int bRet = 0;
+    bRet= do_rk_firmware_upgrade((char *)"/tmp/RKLoader.bin", pCallback, pProgressCallback, szBootDev);
+    if(bRet){
+      result = INSTALL_SUCCESS;
+    } else {
+      result = INSTALL_ERROR;
+    }
+  }
+  ui->SetEnableReboot(true);
+  ui->Print("\n");
+
+  return result;
+}
+
+
+int install_rkloader_package(const std::string& path, bool needs_mount, RecoveryUI* ui) {
+  CHECK(!path.empty());
+
+  int result = INSTALL_SUCCESS;
+  if (setup_install_mounts() != 0) {
+      LOG(ERROR) << "failed to set up expected mounts for install_rkloader_package; aborting";
+      result = INSTALL_ERROR;
+  } else {
+      result = really_install_rkloader_package(path, needs_mount, ui);
+  }
+
+  return result;
 }

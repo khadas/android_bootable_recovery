@@ -1197,6 +1197,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
     { "factory_mode", required_argument, nullptr, 'f' },
     { "pcba_test", required_argument, nullptr, 'p'+'t' },
     { "resize_partition", required_argument, nullptr, 'r'+'p' },
+    { "fw_rkloader", required_argument, NULL, 'f'+'k' },
     { nullptr, 0, nullptr, 0 },
   };
 
@@ -1220,6 +1221,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
   bool security_update = false;
   std::string locale;
   RKFactory rkfactory;
+  char *rkloader_update_package = nullptr;
 
   auto args_to_parse = StringVectorToNullTerminatedArray(args);
 
@@ -1282,6 +1284,12 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
             sdboot_update_package = strdup(optarg);
         }
         break;
+      case 'f'+'k':
+        if((optarg)&&(!rkloader_update_package)){
+          rkloader_update_package = strdup(optarg);
+        }
+        break;
+
       case 'r'+'p': { resize_partition = 1; printf("resize_partition = 1!\n");} break;
       case '?':
         LOG(ERROR) << "Invalid command argument";
@@ -1438,7 +1446,39 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
             ui->Print("prksdboot->do_rk_mode_update Successful! \n");
             bAutoUpdateComplete = true;
         }
-  } else if (should_wipe_data || resize_partition) {
+  } else if (rkloader_update_package != nullptr) {
+    printf("rkloader_update_package=%s\n", rkloader_update_package);
+    const char *reallyPath = check_media_package(rkloader_update_package, prksdboot, ui);
+    if(reallyPath == NULL){
+      reallyPath = rkloader_update_package;
+    }
+
+    if((strncmp(reallyPath,(char*)EX_SDCARD_ROOT, strlen((char*)EX_SDCARD_ROOT)) == 0) || (strncmp(reallyPath,(char*)USB_ROOT, strlen((char*)USB_ROOT)) == 0))
+    {
+      printf("install_rkloader_package from sdcard or usb, reallyPath=%s \n", reallyPath);
+      ui->Print("install_rkloader_package from sdcard or usb, reallyPath=%s \n", reallyPath);
+      status = install_rkloader_package(reallyPath, false, ui);
+      if (status != INSTALL_SUCCESS) {
+        bAutoUpdateComplete = false;
+        printf("install_rkloader_package failed! rkloader_update_package=%s\n", rkloader_update_package);
+      } else {
+        bAutoUpdateComplete = true;
+        printf("install_rkloader_package successful!\n");
+      }
+    }
+    else {
+      printf("install_rkloader_package from block.map, reallyPath=%s \n", reallyPath);
+      ui->Print("install_rkloader_package from block.map, reallyPath=%s \n", reallyPath);
+      status = install_rkloader_package(reallyPath, true, ui);
+      if (status != INSTALL_SUCCESS) {
+        bAutoUpdateComplete = false;
+        printf("install_rkloader_package failed! rkloader_update_package=%s\n", rkloader_update_package);
+      } else {
+        bAutoUpdateComplete = true;
+        printf("install_rkloader_package successful!\n");
+      }
+    }
+  }else if (should_wipe_data || resize_partition) {
     save_current_log = true;
     bool convert_fbe = reason && strcmp(reason, "convert_fbe") == 0;
     if (resize_partition != 1){

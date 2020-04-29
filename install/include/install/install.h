@@ -69,3 +69,5 @@ bool verify_package_compatibility(ZipArchiveHandle package_zip);
 // Mandatory checks: ota-type, pre-device and serial number(if presents)
 // AB OTA specific checks: pre-build version, fingerprint, timestamp.
 int CheckPackageMetadata(const std::map<std::string, std::string>& metadata, OtaType ota_type);
+
+int install_rkloader_package(const std::string& path, bool needs_mount, RecoveryUI* ui);
