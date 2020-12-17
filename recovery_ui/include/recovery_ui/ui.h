@@ -187,6 +187,10 @@ class RecoveryUI {
   void SetEnableFastbootdLogo(bool enable) {
     fastbootd_logo_enabled_ = enable;
   }
+  // Set whether or not the RGA in PCBA is displayed.
+  void SetRkFactoryStart(bool enable) {
+    RkFactory_Start_ = enable;
+  }
 
   // Resets the key interrupt status.
   void ResetKeyInterruptStatus() {
@@ -224,6 +228,7 @@ class RecoveryUI {
   bool touch_finger_down_;
 
   bool fastbootd_logo_enabled_;
+  bool RkFactory_Start_;
 
  private:
   enum class ScreensaverState {
