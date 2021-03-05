@@ -64,6 +64,7 @@ cc_library_static {
         "verifier.cpp",
         "wipe_data.cpp",
         "wipe_device.cpp",
+        "udisk_upgrade.cpp",
     ],
 
     header_libs: [
