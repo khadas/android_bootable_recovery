@@ -697,5 +697,9 @@ bool SetupPackageMount(const std::string& package_path, bool* should_use_fuse) {
   if (android::base::StartsWith(package_path, CACHE_ROOT)) {
     *should_use_fuse = false;
   }
+
+  if (android::base::StartsWith(package_path, "/udisk")) {
+    *should_use_fuse = false;
+  }
   return true;
 }
