@@ -65,6 +65,8 @@ static constexpr const char* LOCALE_FILE = "/cache/recovery/last_locale";
 
 static RecoveryUI* ui = nullptr;
 
+extern void amlogic_get_args(std::vector<std::string>& args);
+
 static bool IsRoDebuggable() {
   return android::base::GetBoolProperty("ro.debuggable", false);
 }
@@ -151,6 +153,9 @@ static std::vector<std::string> get_args(const int argc, char** const argv, std:
       LOG(INFO) << "Got " << args.size() << " arguments from " << COMMAND_FILE;
     }
   }
+
+  //add get args from factory_update_param.aml
+  amlogic_get_args(args);
 
   // Write the arguments (excluding the filename in args[0]) back into the
   // bootloader control block. So the device will always boot into recovery to
