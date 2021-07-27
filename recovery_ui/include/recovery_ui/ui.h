@@ -29,6 +29,15 @@
 
 static constexpr const char* DEFAULT_LOCALE = "en-US";
 
+class Point {
+  public:
+    int x_ = 0;
+    int y_ = 0;
+    Point(int x, int y):
+    x_(x),y_(y){};
+    bool Valid();
+};
+
 // Abstract class for controlling the user interface during recovery.
 class RecoveryUI {
  public:
@@ -51,6 +60,12 @@ class RecoveryUI {
     TOGGLE,
     REBOOT,
     IGNORE,
+  };
+
+  enum TestResultEnum {
+    TESTING,
+    PASS,
+    FAILED
   };
 
   enum class KeyError : int {
@@ -99,6 +114,7 @@ class RecoveryUI {
   // Print() will also dump the message to stdout / log file, while PrintOnScreenOnly() not.
   virtual void Print(const char* fmt, ...) __printflike(2, 3) = 0;
   virtual void PrintOnScreenOnly(const char* fmt, ...) __printflike(2, 3) = 0;
+  virtual void PrintV(const char*, bool, va_list) = 0;
 
   // Shows the contents of the given file. Caller ensures the patition that contains the file has
   // been mounted.
@@ -148,6 +164,7 @@ class RecoveryUI {
   // --- menu display ---
 
   virtual void SetTitle(const std::vector<std::string>& lines) = 0;
+  virtual void SetTitleResult(const std::vector<TestResultEnum>& lines) = 0;
 
   // Displays a menu with the given 'headers' and 'items'. The supplied 'key_handler' callback,
   // which is typically bound to Device::HandleMenuKey(), should return the expected action for the
@@ -181,6 +198,10 @@ class RecoveryUI {
   void SetEnableFastbootdLogo(bool enable) {
     fastbootd_logo_enabled_ = enable;
   }
+  // Set whether or not the RGA in PCBA is displayed.
+  void SetRkFactoryStart(bool enable) {
+    RkFactory_Start_ = enable;
+  }
 
   // Resets the key interrupt status.
   void ResetKeyInterruptStatus() {
@@ -193,6 +214,8 @@ class RecoveryUI {
   }
 
   virtual bool IsUsbConnected();
+  // Set Whether or not the touch event can be get.
+  void SetEnableTouchEvent(bool enable_touch, bool enable_swipe);
 
  protected:
   void EnqueueKey(int key_code);
@@ -207,8 +230,18 @@ class RecoveryUI {
 
   // Whether we should listen for touch inputs (default: false).
   bool touch_screen_allowed_;
+  bool swipe_screen_allowed_;
+
+  // Move these data here, allow child class to use.
+  int touch_X_;
+  int touch_Y_;
+  int touch_start_X_;
+  int touch_start_Y_;
+  bool touch_finger_down_;
+  std::vector<Point> points_;
 
   bool fastbootd_logo_enabled_;
+  bool RkFactory_Start_;
 
  private:
   enum class ScreensaverState {
@@ -255,11 +288,6 @@ class RecoveryUI {
 
   // Touch event related variables. See the comments in RecoveryUI::OnInputEvent().
   int touch_slot_;
-  int touch_X_;
-  int touch_Y_;
-  int touch_start_X_;
-  int touch_start_Y_;
-  bool touch_finger_down_;
   bool touch_swiping_;
   bool is_bootreason_recovery_ui_;
 

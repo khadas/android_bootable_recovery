@@ -220,12 +220,14 @@ class ScreenRecoveryUI : public RecoveryUI, public DrawInterface {
   void Print(const char* fmt, ...) override __printflike(2, 3);
   void PrintOnScreenOnly(const char* fmt, ...) override __printflike(2, 3);
   void ShowFile(const std::string& filename) override;
+  void PrintV(const char*, bool, va_list) override;
 
   // menu display
   size_t ShowMenu(const std::vector<std::string>& headers, const std::vector<std::string>& items,
                   size_t initial_selection, bool menu_only,
                   const std::function<int(int, bool)>& key_handler) override;
   void SetTitle(const std::vector<std::string>& lines) override;
+  void SetTitleResult(const std::vector<TestResultEnum>& lines) override;
 
   void KeyLongPress(int) override;
 
@@ -302,7 +304,6 @@ class ScreenRecoveryUI : public RecoveryUI, public DrawInterface {
   void ProgressThreadLoop();
 
   virtual void ShowFile(FILE*);
-  virtual void PrintV(const char*, bool, va_list);
   void PutChar(char);
   void ClearText();
 
@@ -383,6 +384,7 @@ class ScreenRecoveryUI : public RecoveryUI, public DrawInterface {
   bool show_text_ever;  // has show_text ever been true?
 
   std::vector<std::string> title_lines_;
+  std::vector<TestResultEnum> result_lines_;
 
   bool scrollable_menu_;
   std::unique_ptr<Menu> menu_;
