@@ -64,7 +64,8 @@ LOCAL_NOTICE_FILE := $(LOCAL_PATH)/NOTICE
 ifeq ($(TARGET_USERIMAGES_USE_F2FS),true)
 LOCAL_REQUIRED_MODULES += \
     make_f2fs.recovery \
-    sload_f2fs.recovery
+    sload_f2fs.recovery \
+    fsck.f2fs.recovery
 endif
 
 # On A/B devices recovery-persist reads the recovery related file from the persist storage and

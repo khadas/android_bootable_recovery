@@ -114,6 +114,9 @@ cc_defaults {
         "libotautil",
         "libsnapshot_nobinder",
         "update_metadata-protos",
+        "libmtdutils",
+        "librkutility",
+        "librkupdate",
     ],
 }
 
@@ -146,6 +149,10 @@ cc_binary {
     name: "recovery",
     recovery: true,
 
+    cppflags: [
+        "-DLogToSerial",
+    ],
+
     defaults: [
         "libinstall_defaults",
         "librecovery_defaults",
@@ -163,6 +170,9 @@ cc_binary {
     static_libs: [
         "librecovery",
         "librecovery_ui_default",
+        "libmtdutils",
+        "librkutility",
+        "librkupdate",
     ],
 
     required: [
