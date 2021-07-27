@@ -243,6 +243,7 @@ drmModeConnector* MinuiBackendDrm::FindMainMonitor(int fd, drmModeRes* resources
     DRM_MODE_CONNECTOR_LVDS,
     DRM_MODE_CONNECTOR_eDP,
     DRM_MODE_CONNECTOR_DSI,
+    DRM_MODE_CONNECTOR_HDMIA,
   };
 
   drmModeConnector* main_monitor_connector = nullptr;
