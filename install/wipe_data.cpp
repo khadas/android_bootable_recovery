@@ -40,8 +40,8 @@ constexpr const char* METADATA_ROOT = "/metadata";
 /**
  * reset hdmi after restore factory.
 */
-#define BASEPARAMER_PARTITION_NAME "/dev/block/by-name/baseparameter"
-#define BASEPARAMER_PARTITION_SIZE 1024*1024
+#define BASEPARAMER_PARTITION_NAME "/baseparameter"
+#define BASEPARAMER_PARTITION_SIZE 1024*1024/2
 
 int erase_baseparameter() {
     Volume* v = volume_for_mount_point(BASEPARAMER_PARTITION_NAME);
@@ -161,6 +161,7 @@ bool WipeData(Device* device, bool convert_fbe) {
   if (success) {
     success &= device->PostWipeData();
   }
+  erase_baseparameter();
   ui->Print("Data wipe %s.\n", success ? "complete" : "failed");
   return success;
 }

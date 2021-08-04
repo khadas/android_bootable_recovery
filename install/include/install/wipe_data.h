@@ -30,6 +30,5 @@ bool WipeCache(RecoveryUI* ui, const std::function<bool()>& confirm);
 bool WipeData(Device* device, bool convert_fbe);
 
 void SureMetadataMount();
-int erase_baseparameter();
 void WipeFrp();
 int ResizeData(Device* device);

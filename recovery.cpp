@@ -1328,7 +1328,6 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
     }
     if(should_wipe_all) {
       WipeFrp();
-      erase_baseparameter();
     }
   }else if (factory_mode != nullptr){
     //status = (InstallResult)rkfactory.StartFactorytest(device);
