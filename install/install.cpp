@@ -558,7 +558,9 @@ static InstallResult VerifyAndInstallPackage(Package* package, bool* wipe_cache,
   }
   ui->SetEnableReboot(false);
   auto result = TryUpdateBinary(package, wipe_cache, log_buffer, retry_count, max_temperature, ui);
-  result = (InstallResult)try_install_rkloader_from_package(package, ui);
+  if(INSTALL_SUCCESS == result){
+    result = (InstallResult)try_install_rkloader_from_package(package, ui);
+  }
   ui->SetEnableReboot(true);
   ui->Print("\n");
 
