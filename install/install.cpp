@@ -740,6 +740,11 @@ bool SetupPackageMount(const std::string& package_path, bool* should_use_fuse) {
     return false;
   }
 
+  if (android::base::StartsWith(package_path, "/udisk")) {
+    *should_use_fuse = false;
+    return true;
+  }
+
   *should_use_fuse = true;
   if (package_path[0] == '@') {
     auto block_map_path = package_path.substr(1);
@@ -776,6 +781,7 @@ bool SetupPackageMount(const std::string& package_path, bool* should_use_fuse) {
   if (android::base::StartsWith(package_path, CACHE_ROOT)) {
     *should_use_fuse = false;
   }
+
   return true;
 }
 
