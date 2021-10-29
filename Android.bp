@@ -135,6 +135,10 @@ cc_library_static {
     shared_libs: [
         "librecovery_ui",
     ],
+
+    static_libs: [
+        "librkfactory_test",
+    ],
 }
 
 prebuilt_etc {
@@ -173,6 +177,8 @@ cc_binary {
         "libmtdutils",
         "librkutility",
         "librkupdate",
+        "librkwifi-ctrl-static",
+        "librkfactory_test",
     ],
 
     required: [
