@@ -40,7 +40,7 @@ constexpr const char* METADATA_ROOT = "/metadata";
 /**
  * reset hdmi after restore factory.
 */
-#define BASEPARAMER_PARTITION_NAME "/baseparameter"
+#define BASEPARAMER_PARTITION_NAME "/baseparamer"
 #define BASEPARAMER_PARTITION_SIZE 1024*1024/2
 
 int erase_baseparameter() {
@@ -49,12 +49,14 @@ int erase_baseparameter() {
         printf("unknown volume baseparamer, not erase baseparamer\n");
         return -1;
     }
-
     int file;
-    file = open((v->blk_device).c_str(), O_RDWR);
+    file = open("/dev/block/by-name/baseparameter", O_RDWR);
     if (file < 0){
-        printf("baseparamer file can not be opened");
-        return -1;
+        file = open("/dev/block/by-name/baseparamer", O_RDWR);
+        if (file < 0) {
+            printf("baseparamer file can not be opened");
+            return -1;
+        }
     }
     lseek(file, BASEPARAMER_PARTITION_SIZE, SEEK_SET);
 
