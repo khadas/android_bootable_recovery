@@ -1271,6 +1271,8 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
         if (IsRoDebuggable()) {
           ui->ShowText(true);
         }
+      }else{
+        bAutoUpdateComplete = true;
       }
     }
   }else if (sdboot_update_package != nullptr) {
