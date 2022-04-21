@@ -28,6 +28,13 @@
 #include "graphics_drm.h"
 #include "graphics_fbdev.h"
 #include "minui/minui.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+
+
+
 
 static GRFont* gr_font = NULL;
 static MinuiBackend* gr_backend = nullptr;
@@ -347,6 +354,23 @@ void gr_flip() {
   gr_draw = gr_backend->Flip();
 }
 
+int IsHdmiConnected() {
+  int fd = open("/sys/class/amhdmitx/amhdmitx0/hdmi/state", O_RDONLY);
+  if (fd < 0) {
+    printf("failed to open /sys/class/amhdmitx/amhdmitx0/hdmi/state: %s\n", strerror(errno));
+    return 0;
+  }
+
+  char buf[7] = {0,};
+  int connected = (TEMP_FAILURE_RETRY(read(fd, buf, 6)) == 6) && !strncmp(buf,"HDMI=1",6);
+  printf(" IsHdmiConnected connected %d buf %s\n ",connected,buf);
+  if (close(fd) < 0) {
+    printf("failed to close /sys/class/amhdmitx/amhdmitx0/hdmi/state: %s\n", strerror(errno));
+  }
+  return connected;
+}
+
+
 int gr_init() {
   gr_init_font();
 
@@ -374,8 +398,11 @@ int gr_init() {
 
   gr_flip();
   gr_flip();
-
+  if(IsHdmiConnected() == 0)
+  {
+  printf("hdmi not connect  need to rotate\n");
   gr_rotate(DEFAULT_ROTATION);
+  }
 
   if (gr_draw->pixel_bytes != 4) {
     printf("gr_init: Only 4-byte pixel formats supported\n");
