@@ -34,6 +34,16 @@
 #include <xf86drmMode.h>
 
 #include "minui/minui.h"
+#include "Ubootenv.h"
+
+char *get_bootloader_env(const char * name)
+{
+    Ubootenv *ubootenv = new Ubootenv();
+     char ubootenv_name[128] = {0};
+    const char *ubootenv_var = "ubootenv.var.";
+    sprintf(ubootenv_name, "%s%s", ubootenv_var, name);
+    return (char *)ubootenv->getValue(ubootenv_name);
+}
 
 GRSurfaceDrm::~GRSurfaceDrm() {
   if (mmapped_buffer_) {
@@ -207,6 +217,29 @@ static drmModeCrtc* find_crtc_for_connector(int fd, drmModeRes* resources,
   return nullptr;
 }
 
+static drmModeConnector* find_used_connector_by_uboot_mode(int fd, drmModeRes* resources,
+                                       const char* uboot_mode, uint32_t* mode_index) {
+  *mode_index = 0;
+
+  for (int i = 0; i < resources->count_connectors; i++) {
+    drmModeConnector* connector = drmModeGetConnector(fd, resources->connectors[i]);
+    if (connector) {
+      if ((connector->connection == DRM_MODE_CONNECTED) && (connector->count_modes > 0)) {
+         for (int modes = 0; modes < connector->count_modes; modes++) {
+            if (!strcmp(connector->modes[modes].name, uboot_mode)) {
+               *mode_index = modes;
+               break;
+            }
+         }
+
+        return connector;
+      }
+      drmModeFreeConnector(connector);
+    }
+  }
+  return nullptr;
+}
+
 static drmModeConnector* find_used_connector_by_type(int fd, drmModeRes* resources, unsigned type) {
   for (int i = 0; i < resources->count_connectors; i++) {
     drmModeConnector* connector = drmModeGetConnector(fd, resources->connectors[i]);
@@ -238,6 +271,15 @@ static drmModeConnector* find_first_connected_connector(int fd, drmModeRes* reso
 
 drmModeConnector* MinuiBackendDrm::FindMainMonitor(int fd, drmModeRes* resources,
                                                    uint32_t* mode_index) {
+  /* Amlogic */
+  const char* uboot_first_mode = get_bootloader_env("outputmode");
+  printf("Recovery uses uboot mode: %s\n", uboot_first_mode);
+  if (uboot_first_mode) {
+    main_monitor_connector = find_used_connector_by_uboot_mode(fd, resources, uboot_first_mode, mode_index);
+
+    if (main_monitor_connector)
+      return main_monitor_connector;
+  }
   /* Look for LVDS/eDP/DSI connectors. Those are the main screens. */
   static constexpr unsigned kConnectorPriority[] = {
     DRM_MODE_CONNECTOR_LVDS,
