@@ -30,11 +30,47 @@
 #include "recovery_ui/ui.h"
 #include "recovery_utils/logging.h"
 #include "recovery_utils/roots.h"
+#include "mtdutils/rk29.h"
 
 constexpr const char* CACHE_ROOT = "/cache";
 constexpr const char* DATA_ROOT = "/data";
 constexpr const char* METADATA_ROOT = "/metadata";
 
+/**
+ * reset hdmi after restore factory.
+*/
+#define BASEPARAMER_PARTITION_NAME "/baseparamer"
+#define BASEPARAMER_PARTITION_SIZE 1024*1024/2
+
+int erase_baseparameter() {
+    Volume* v = volume_for_mount_point(BASEPARAMER_PARTITION_NAME);
+    if (v == NULL) {
+        printf("unknown volume baseparamer, not erase baseparamer\n");
+        return -1;
+    }
+    int file;
+    file = open("/dev/block/by-name/baseparameter", O_RDWR);
+    if (file < 0){
+        file = open("/dev/block/by-name/baseparamer", O_RDWR);
+        if (file < 0) {
+            printf("baseparamer file can not be opened");
+            return -1;
+        }
+    }
+    lseek(file, BASEPARAMER_PARTITION_SIZE, SEEK_SET);
+
+    //size of baseparameter.
+    char buf[BASEPARAMER_PARTITION_SIZE];
+    memset(buf, 0, BASEPARAMER_PARTITION_SIZE);
+    read(file, buf, BASEPARAMER_PARTITION_SIZE);
+
+    lseek(file, 0L, SEEK_SET);
+    write(file, (char*)(&buf), BASEPARAMER_PARTITION_SIZE);
+    close(file);
+    sync();
+
+    return 0;
+}
 static bool EraseVolume(const char* volume, RecoveryUI* ui) {
   bool is_cache = (strcmp(volume, CACHE_ROOT) == 0);
 
@@ -103,6 +139,59 @@ bool WipeData(Device* device) {
   if (success) {
     success &= device->PostWipeData();
   }
+  erase_baseparameter();
   ui->Print("Data wipe %s.\n", success ? "complete" : "failed");
   return success;
+}
+
+void SureMetadataMount() {
+  if (ensure_path_mounted(METADATA_ROOT)) {
+    printf("mount metadata fail,so formate...\n");
+    reset_tmplog_offset();
+    format_volume(METADATA_ROOT);
+    ensure_path_mounted(METADATA_ROOT);
+  }
+}
+void WipeFrp() {
+  printf("begin to wipe frp partion!\n");
+  int ret = format_volume("/frp");
+  if(ret<0){
+    printf("wiping frp failed!\n");
+  } else {
+    printf("wiping frp success!\n");
+  }
+}
+
+int ResizeData(Device* device){
+  Volume* v11 = volume_for_mount_point("/data");
+  int result = 0;
+  //RecoveryUI* ui = device->GetUI();
+  auto ui = device->GetUI();
+  ui->Print("\n-- Resize data...\n");
+
+  if (nullptr == v11){
+    printf("ResizeData failed! v11 is NULL \n");
+	ui->Print("\n-- Resize failed v11 is NULL...\n");
+    return -1;
+  }
+
+  ui->SetBackground(RecoveryUI::ERASING);
+  ui->SetProgressType(RecoveryUI::INDETERMINATE);
+
+  ui->Print("Resizing %s...\n", (v11->blk_device).c_str());
+  printf("ResizeData blk_device=%s \n", (v11->blk_device).c_str());
+  if(strcmp((v11->fs_type).c_str(), (char*)"f2fs") == 0){
+    if(rk_check_and_resizefs_f2fs((v11->blk_device).c_str())) {
+      printf("check and resize /data failed! blk_device=%s \n", (v11->blk_device).c_str());
+      result = -1;
+    }
+  }else{
+    if(rk_check_and_resizefs((v11->blk_device).c_str())) {
+      printf("check and resize /data failed! blk_device=%s \n", (v11->blk_device).c_str());
+      result = -1;
+    }
+  }
+
+  ui->Print("\n-- Resize Complete...\n");
+  return result;
 }

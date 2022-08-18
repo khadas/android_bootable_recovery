@@ -28,3 +28,7 @@ bool WipeCache(RecoveryUI* ui, const std::function<bool()>& confirm);
 
 // Returns true on success.
 bool WipeData(Device* device);
+
+void SureMetadataMount();
+void WipeFrp();
+int ResizeData(Device* device);
