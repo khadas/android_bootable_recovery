@@ -276,6 +276,7 @@ bool MinuiBackendDrm::FindAndSetMonitor(int fd, drmModeRes* resources) {
     DRM_MODE_CONNECTOR_LVDS,
     DRM_MODE_CONNECTOR_eDP,
     DRM_MODE_CONNECTOR_DSI,
+    DRM_MODE_CONNECTOR_HDMIA,
   };
 
   std::vector<drmModeConnector*> drmConnectors;
