@@ -41,6 +41,7 @@ cc_defaults {
 
     static_libs: [
         "libotautil",
+        "librkutility",
 
         // External dependencies.
         "android.hardware.health-translate-ndk",
@@ -98,5 +99,6 @@ cc_library_static {
         "//bootable/recovery/install",
         "//bootable/recovery/minadbd",
         "//bootable/recovery/tests",
+//	"//bootable/recovery/pcba_core",
     ],
 }
