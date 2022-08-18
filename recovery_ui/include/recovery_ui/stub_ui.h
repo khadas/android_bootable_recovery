@@ -57,6 +57,7 @@ class StubRecoveryUI : public RecoveryUI {
     vprintf(fmt, ap);
     va_end(ap);
   }
+  void PrintV(const char*, bool, va_list) override {}
   void PrintOnScreenOnly(const char* /* fmt */, ...) override {}
   void ShowFile(const std::string& /* filename */) override {}
 
@@ -80,6 +81,7 @@ class StubRecoveryUI : public RecoveryUI {
   }
 
   void SetTitle(const std::vector<std::string>& /* lines */) override {}
+  void SetTitleResult(const std::vector<TestResultEnum>& /* lines */) override {}
 };
 
 #endif  // RECOVERY_STUB_UI_H
