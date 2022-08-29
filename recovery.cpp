@@ -64,7 +64,7 @@
 #include "rkutility/rktools.h"
 #include "rkutility/sdboot.h"
 #include "rkupdate/Upgrade.h"
-//#include "pcba_core/rkfactory_test.h"
+#include "pcba_core/rkfactory_test.h"
 
 static constexpr const char* COMMAND_FILE = "/cache/recovery/command";
 static constexpr const char* LAST_KMSG_FILE = "/cache/recovery/last_kmsg";
@@ -1082,7 +1082,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
   int retry_count = 0;
   bool security_update = false;
   std::string locale;
-  //RKFactory rkfactory;
+  RKFactory rkfactory;
   char *rkloader_update_package = nullptr;
 
   auto args_to_parse = StringVectorToNullTerminatedArray(args);
@@ -1344,9 +1344,9 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
       WipeFrp();
     }
   }else if (factory_mode != nullptr){
-    //status = (InstallResult)rkfactory.StartFactorytest(device);
-	printf("do_factory_mode status=%d factory_mode=%s \n", status, factory_mode);
-	exit_from_factory = 1;
+    status = (InstallResult)rkfactory.StartFactorytest(device);
+    printf("do_factory_mode status=%d factory_mode=%s \n", status, factory_mode);
+    exit_from_factory = 1;
   }else if (should_prompt_and_wipe_data) {
     // Trigger the logging to capture the cause, even if user chooses to not wipe data.
     save_current_log = true;
