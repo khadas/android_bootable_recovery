@@ -34,6 +34,16 @@
 #include <xf86drmMode.h>
 
 #include "minui/minui.h"
+#include "Ubootenv.h"
+
+char *get_bootloader_env(const char * name)
+{
+    Ubootenv *ubootenv = new Ubootenv();
+     char ubootenv_name[128] = {0};
+    const char *ubootenv_var = "ubootenv.var.";
+    sprintf(ubootenv_name, "%s%s", ubootenv_var, name);
+    return (char *)ubootenv->getValue(ubootenv_name);
+}
 
 GRSurfaceDrm::~GRSurfaceDrm() {
   if (mmapped_buffer_) {
@@ -242,6 +252,34 @@ static drmModeCrtc* find_crtc_for_connector(int fd, drmModeRes* resources,
   return nullptr;
 }
 
+
+std::vector<drmModeConnector*> find_used_connector_by_uboot_mode(int fd, drmModeRes* resources,
+                                                           const char* uboot_mode) {
+  std::vector<drmModeConnector*> drmConnectors;
+  for (int i = 0; i < resources->count_connectors; i++) {
+    drmModeConnector* connector = drmModeGetConnector(fd, resources->connectors[i]);
+    if (connector) {
+      if ((connector->connection == DRM_MODE_CONNECTED) && (connector->count_modes > 0)) {
+        int modes = 0;
+        for (modes = 0; modes < connector->count_modes; modes++) {
+          if (!strcmp(connector->modes[modes].name, uboot_mode)) {
+            drmConnectors.push_back(connector);
+            break;
+          }
+        }
+
+        if (modes == connector->count_modes) {
+          drmModeFreeConnector(connector);
+        }
+      } else {
+        drmModeFreeConnector(connector);
+      }
+    }
+  }
+  return drmConnectors;
+}
+
+
 std::vector<drmModeConnector*> find_used_connector_by_type(int fd, drmModeRes* resources,
                                                            unsigned type) {
   std::vector<drmModeConnector*> drmConnectors;
@@ -275,6 +313,7 @@ static drmModeConnector* find_first_connected_connector(int fd, drmModeRes* reso
 }
 
 bool MinuiBackendDrm::FindAndSetMonitor(int fd, drmModeRes* resources) {
+
   /* Look for LVDS/eDP/DSI connectors. Those are the main screens. */
   static constexpr unsigned kConnectorPriority[] = {
     DRM_MODE_CONNECTOR_LVDS,
@@ -283,11 +322,25 @@ bool MinuiBackendDrm::FindAndSetMonitor(int fd, drmModeRes* resources) {
   };
 
   std::vector<drmModeConnector*> drmConnectors;
-  for (int i = 0; i < arraysize(kConnectorPriority) && drmConnectors.size() < DRM_MAX; i++) {
-    auto connectors = find_used_connector_by_type(fd, resources, kConnectorPriority[i]);
-    for (auto connector : connectors) {
+
+  /* Amlogic */
+  const char* uboot_first_mode = get_bootloader_env("outputmode");
+  if (uboot_first_mode) {
+	printf("Recovery uses uboot mode: %s\n", uboot_first_mode);
+    auto envConnectors = find_used_connector_by_uboot_mode(fd, resources, uboot_first_mode);
+    for (auto connector : envConnectors) {
       drmConnectors.push_back(connector);
       if (drmConnectors.size() >= DRM_MAX) break;
+    }
+  }
+
+  if (drmConnectors.empty()) {
+    for (int i = 0; i < arraysize(kConnectorPriority) && drmConnectors.size() < DRM_MAX; i++) {
+      auto connectors = find_used_connector_by_type(fd, resources, kConnectorPriority[i]);
+      for (auto connector : connectors) {
+        drmConnectors.push_back(connector);
+        if (drmConnectors.size() >= DRM_MAX) break;
+      }
     }
   }
 
