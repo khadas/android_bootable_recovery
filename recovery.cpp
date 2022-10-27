@@ -129,14 +129,6 @@ static bool save_current_log = false;
 static bool IsRoDebuggable() {
   return android::base::GetBoolProperty("ro.debuggable", false);
 }
-static FILE* fopen_path_legacy(const char* path, const char* mode) {
-  if (ensure_path_mounted(path) != 0) {
-    LOG(ERROR) << "Can't mount " << path;
-    return nullptr;
-  }
-
-  return fopen(path, mode);
-}
 
 
 // Clear the recovery command and prepare to boot a (hopefully working) system,
@@ -163,20 +155,21 @@ static void FinishRecovery(RecoveryUI* ui) {
     LOG(ERROR) << "Failed to clear BCB message: " << err;
   }
 
-  if (bAutoUpdateComplete==true) {
-    FILE *fp = fopen_path_legacy(FLAG_FILE, "w");
-    if (fp == NULL) {
-        LOG(ERROR) << "Can't open %s\n" << FLAG_FILE << err;
-		printf("Can't open %s\n", FLAG_FILE);
-    }
+  if (bAutoUpdateComplete) {
     char strflag[160]="success$path=";
     strcat(strflag,updatepath);
-    if (fwrite(strflag, 1, sizeof(strflag), fp) != sizeof(strflag)) {
-        LOG(ERROR) << "write %s failed!" << FLAG_FILE << err;
-		printf("Write %s failed! \n", FLAG_FILE);
+
+    std::string flag = strflag;
+    printf("Update done strflag=%s flag=%s\n", strflag, flag.c_str());
+    if (ensure_path_mounted(FLAG_FILE) != 0) {
+      LOG(ERROR) << "Failed to mount " << FLAG_FILE;
+      printf("Failed to mount %s \n", FLAG_FILE);
+    } else if (!android::base::WriteStringToFile(flag, FLAG_FILE)) {
+      PLOG(ERROR) << "Failed to save flag to " << FLAG_FILE;
+      printf("Failed to save flag to %s \n", FLAG_FILE);
     }
-    fclose(fp);
-    bAutoUpdateComplete=false;
+
+    bAutoUpdateComplete = false;
   }
 
   // Remove the command file, so recovery won't repeat indefinitely.
