@@ -54,6 +54,10 @@
 #define MIN(a,b)    ((a) < (b) ? (a) : (b))
 #undef ABS
 #define ABS(a)      ((a) >= 0 ? (a) : (-(a)))
+enum DirectRenderManager {
+    DRM_INNER,
+    DRM_OUTER,
+};
 
 // Return the current time as a double (including fractions of a second).
 static double now() {
@@ -341,7 +345,8 @@ ScreenRecoveryUI::ScreenRecoveryUI(bool scrollable_menu)
       stage(-1),
       max_stage(-1),
       locale_(""),
-      rtl_locale_(false) {}
+      rtl_locale_(false),
+      is_graphics_available(false) {}
 
 ScreenRecoveryUI::~ScreenRecoveryUI() {
   progress_thread_stopped_ = true;
@@ -991,6 +996,7 @@ bool ScreenRecoveryUI::Init(const std::string& locale) {
   if (!InitGraphics()) {
     return false;
   }
+  is_graphics_available = true;
 
   if (!InitTextParams()) {
     return false;
@@ -1034,6 +1040,9 @@ bool ScreenRecoveryUI::Init(const std::string& locale) {
 
   // Keep the progress bar updated, even when the process is otherwise busy.
   progress_thread_ = std::thread(&ScreenRecoveryUI::ProgressThreadLoop, this);
+
+  // set the callback for hall sensor event
+  (void)ev_sync_sw_state([this](auto&& a, auto&& b) { return this->SetSwCallback(a, b);});
 
   return true;
 }
@@ -1451,4 +1460,46 @@ void ScreenRecoveryUI::SetLocale(const std::string& new_locale) {
       rtl_locale_ = true;
     }
   }
+}
+
+int ScreenRecoveryUI::SetSwCallback(int code, int value) {
+  if (!is_graphics_available) { return -1; }
+  if (code > SW_MAX) { return -1; }
+  if (code != SW_LID) { return 0; }
+
+  /* detect dual display */
+  if (!gr_has_multiple_connectors()) { return -1; }
+
+  /* turn off all screen */
+  gr_fb_blank(true, DirectRenderManager::DRM_INNER);
+  gr_fb_blank(true, DirectRenderManager::DRM_OUTER);
+  gr_color(0, 0, 0, 255);
+  gr_clear();
+
+  /* turn on the screen */
+  gr_fb_blank(false, value);
+  gr_flip();
+
+  /* set the retation */
+  std::string rotation_str;
+  if (value == DirectRenderManager::DRM_OUTER) {
+    rotation_str =
+      android::base::GetProperty("ro.minui.second_rotation", "ROTATION_NONE");
+  } else {
+    rotation_str =
+      android::base::GetProperty("ro.minui.default_rotation", "ROTATION_NONE");
+  }
+
+  if (rotation_str == "ROTATION_RIGHT") {
+    gr_rotate(GRRotation::RIGHT);
+  } else if (rotation_str == "ROTATION_DOWN") {
+    gr_rotate(GRRotation::DOWN);
+  } else if (rotation_str == "ROTATION_LEFT") {
+    gr_rotate(GRRotation::LEFT);
+  } else {  // "ROTATION_NONE" or unknown string
+    gr_rotate(GRRotation::NONE);
+  }
+  Redraw();
+
+  return 0;
 }
