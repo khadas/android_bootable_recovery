@@ -175,13 +175,23 @@ int TextMenu::DrawHeader(int x, int y) const {
 
 int TextMenu::DrawItems(int x, int y, int screen_width, bool long_press) const {
   int offset = 0;
+  int max_height = 0;
+  int j = 0;
+  int total = 0;
 
   draw_funcs_.SetColor(UIElement::MENU);
   // Do not draw the horizontal rule for wear devices.
   if (!scrollable()) {
     offset += draw_funcs_.DrawHorizontalRule(y + offset) + 4;
   }
-  for (size_t i = MenuStart(); i < MenuEnd(); ++i) {
+
+  max_height = gr_fb_height() - y;
+  total = (char_height_ + 4) * (selection() +1) + offset;
+  if (total > max_height) {
+	  j = ((total - max_height) / (char_height_ + 4)) + 1;
+  }
+
+  for (size_t i = (MenuStart() + j); i < MenuEnd(); ++i) {
     bool bold = false;
     if (i == selection()) {
       // Draw the highlight bar.
