@@ -29,6 +29,7 @@
 #include <android-base/macros.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
+#include <android-base/properties.h>
 #include <drm_fourcc.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -300,6 +301,11 @@ bool MinuiBackendDrm::FindAndSetMonitor(int fd, drmModeRes* resources) {
     }
   }
 
+  int is_rk3528 = 0;
+  std::string soc_platform = android::base::GetProperty("ro.board.platform", "unknown");
+  if(soc_platform == "rk3528")
+    is_rk3528 = 1;
+
   for (int drm_index = 0; drm_index < drmConnectors.size(); drm_index++) {
     drm[drm_index].monitor_connector = drmConnectors[drm_index];
 
@@ -309,7 +315,15 @@ bool MinuiBackendDrm::FindAndSetMonitor(int fd, drmModeRes* resources) {
              drmConnectors[drm_index]->modes[modes].hdisplay,
              drmConnectors[drm_index]->modes[modes].vdisplay,
              drmConnectors[drm_index]->modes[modes].vrefresh);
-      if (drmConnectors[drm_index]->modes[modes].type & DRM_MODE_TYPE_PREFERRED) {
+      if (is_rk3528) {
+        int width;
+
+        width = drmConnectors[drm_index]->modes[modes].hdisplay;
+        if (width > 2048)
+          continue;
+      }
+
+      if (is_rk3528 || drmConnectors[drm_index]->modes[modes].type & DRM_MODE_TYPE_PREFERRED) {
         printf("Choosing display mode #%d\n", modes);
         drm[drm_index].selected_mode = modes;
         break;
