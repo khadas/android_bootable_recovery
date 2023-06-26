@@ -71,7 +71,8 @@ endif
 LOCAL_REQUIRED_MODULES += \
     mkfs.erofs.recovery \
     dump.erofs.recovery \
-    fsck.erofs.recovery
+    fsck.erofs.recovery \
+    tune2fs.recovery
 
 # On A/B devices recovery-persist reads the recovery related file from the persist storage and
 # copies them into /data/misc/recovery. Then, for both A/B and non-A/B devices, recovery-persist

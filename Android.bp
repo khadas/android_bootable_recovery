@@ -119,6 +119,9 @@ cc_defaults {
         "liblz4",
         "libzstd",
         "update_metadata-protos",
+        "libmtdutils",
+        "librkutility",
+        "librkupdate",
     ],
 }
 
@@ -137,6 +140,10 @@ cc_library_static {
     shared_libs: [
         "librecovery_ui",
     ],
+
+    static_libs: [
+//        "librkfactory_test",
+    ],
 }
 
 prebuilt_etc {
@@ -150,6 +157,10 @@ prebuilt_etc {
 cc_binary {
     name: "recovery",
     recovery: true,
+
+    cppflags: [
+        "-DLogToSerial",
+    ],
 
     defaults: [
         "libinstall_defaults",
@@ -170,6 +181,11 @@ cc_binary {
     static_libs: [
         "librecovery",
         "librecovery_ui_default",
+        "libmtdutils",
+        "librkutility",
+        "librkupdate",
+//        "librkwifi-ctrl-static",
+//        "librkfactory_test",
     ],
 
     required: [
