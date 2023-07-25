@@ -1332,6 +1332,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
         status = INSTALL_ERROR;
         printf("ResizeData failed! \n");
       }
+      WipeCache(ui, nullptr);
     }
     if(should_wipe_all) {
       WipeFrp();
