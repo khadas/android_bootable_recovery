@@ -142,7 +142,7 @@ cc_library_static {
     ],
 
     static_libs: [
-//        "librkfactory_test",
+        "librkfactory_test",
     ],
 }
 
@@ -184,8 +184,8 @@ cc_binary {
         "libmtdutils",
         "librkutility",
         "librkupdate",
-//        "librkwifi-ctrl-static",
-//        "librkfactory_test",
+        "librkwifi-ctrl-static",
+        "librkfactory_test",
     ],
 
     required: [
