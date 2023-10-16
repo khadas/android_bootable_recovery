@@ -156,7 +156,7 @@ static void FinishRecovery(RecoveryUI* ui) {
 
   if (bAutoUpdateComplete) {
     char strflag[160]="success$path=";
-    strcat(strflag,updatepath);
+    strlcat(strflag,updatepath,sizeof(strflag));
 
     std::string flag = strflag;
     printf("Update done strflag=%s flag=%s\n", strflag, flag.c_str());
@@ -1206,7 +1206,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
         else
             printf("modified_path allocation failed\n");
         }
-        strcpy(updatepath, update_package);
+        strlcpy(updatepath, update_package, sizeof(updatepath));
   }
   printf("\n");
 
