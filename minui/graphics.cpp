@@ -44,6 +44,7 @@ static PixelFormat pixel_format = PixelFormat::UNKNOWN;
 // The graphics backend list that provides fallback options for the default backend selection.
 // For example, it will fist try DRM, then try FBDEV if DRM is unavailable.
 constexpr auto default_backends = { GraphicsBackend::DRM, GraphicsBackend::FBDEV };
+constexpr auto ebook_backends = { GraphicsBackend::FBDEV, GraphicsBackend::DRM };
 
 static bool outside(int x, int y) {
   auto swapped = (rotation == GRRotation::LEFT || rotation == GRRotation::RIGHT);
@@ -398,7 +399,11 @@ std::unique_ptr<MinuiBackend> create_backend(GraphicsBackend backend) {
 }
 
 int gr_init() {
-  return gr_init(default_backends);
+  bool is_ebook_fb = android::base::GetBoolProperty("sys.ebook.recovery.ebook_fb", false);
+  if (is_ebook_fb)
+    return gr_init(ebook_backends);
+  else
+    return gr_init(default_backends);
 }
 
 int gr_init(std::initializer_list<GraphicsBackend> backends) {
