@@ -95,7 +95,7 @@ struct ebc_buf_info_t{
   int win_y2;
   int width_mm;
   int height_mm;
-  int needpic;
+  int dropable;
   char tid_name[16];
 }__packed;
 
