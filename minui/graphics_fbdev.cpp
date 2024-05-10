@@ -97,6 +97,7 @@ struct ebc_buf_info_t{
   int height_mm;
   int dropable;
   char tid_name[16];
+  int dma_buf_fd;
 }__packed;
 
 
