@@ -23,6 +23,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 #include <memory>
 
@@ -35,6 +36,51 @@
 
 #include "minui/minui.h"
 #include "Ubootenv.h"
+
+#define DRM_CONNECTOR_PROP_MESON_TYPE "meson.connector_type"
+
+struct conn_type_name_list {
+    uint32_t type;
+    const char *name;
+};
+
+static struct conn_type_name_list drm_connector_enum_list[] = {
+        {DRM_MODE_CONNECTOR_HDMIA,          "HDMI-A"},
+        {DRM_MODE_CONNECTOR_TV,             "CVBS"},
+        {DRM_MODE_CONNECTOR_LVDS,           "LVDS"},
+        {DRM_MODE_CONNECTOR_MESON_LVDS_A,   "LVDS-A"},
+        {DRM_MODE_CONNECTOR_MESON_LVDS_B,   "LVDS-B"},
+        {DRM_MODE_CONNECTOR_MESON_LVDS_C,   "LVDS-C"},
+        {DRM_MODE_CONNECTOR_MESON_VBYONE_A, "VBYONE-A"},
+        {DRM_MODE_CONNECTOR_MESON_VBYONE_B, "VBYONE-B"},
+        {DRM_MODE_CONNECTOR_MESON_MIPI_A,   "MIPI-A"},
+        {DRM_MODE_CONNECTOR_MESON_MIPI_B,   "MIPI-B"},
+        {DRM_MODE_CONNECTOR_MESON_EDP_A,    "EDP-A"},
+        {DRM_MODE_CONNECTOR_MESON_EDP_B,    "EDP-B"},
+        {DRM_MODE_CONNECTOR_MESON_HDMIA_A,    "HDMI-A-A"},
+        {DRM_MODE_CONNECTOR_MESON_HDMIA_B,    "HDMI-A-B"},
+        {DRM_MODE_CONNECTOR_MESON_HDMIA_C,    "HDMI-A-C"},
+        {DRM_MODE_CONNECTOR_MESON_HDMIB_A,    "HDMI-B-A"},
+        {DRM_MODE_CONNECTOR_MESON_HDMIB_B,    "HDMI-B-B"},
+        {DRM_MODE_CONNECTOR_MESON_HDMIB_C,    "HDMI-B-C"},
+        {DRM_MODE_CONNECTOR_VIRTUAL,    "VIRTUAL"},
+};
+
+drm_connector_type_t drmStringToConnType(
+        const char *name) {
+    drm_connector_type_t type = DRM_MODE_CONNECTOR_INVALID_TYPE;
+    int i = 0;
+    do {
+        if (strcasecmp(name, drm_connector_enum_list[i].name) == 0) {
+            type = drm_connector_enum_list[i].type;
+            break;
+        } else {
+            i++;
+        }
+    } while (drm_connector_enum_list[i].type != DRM_MODE_CONNECTOR_Unknown);
+
+    return type;
+}
 
 char *get_bootloader_env(const char * name)
 {
@@ -312,6 +358,27 @@ static drmModeConnector* find_first_connected_connector(int fd, drmModeRes* reso
   return nullptr;
 }
 
+std::optional<uint64_t> find_property_value_by_connector(int fd, uint32_t connector_id, const char *name) {
+    drmModeObjectPropertiesPtr props =
+            drmModeObjectGetProperties(fd, connector_id, DRM_MODE_OBJECT_CONNECTOR);
+    std::optional<uint64_t> result = std::nullopt;
+    for (int i = 0; i < props->count_props; i++) {
+        drmModePropertyPtr prop = drmModeGetProperty(fd, props->props[i]);
+        if (!prop) {
+            printf("property is null\n");
+        }
+        if (strcmp(prop->name, name) == 0) {
+            result = props->prop_values[i];
+            printf("property %s value: %" PRIu64 "\n", name, *result);
+        }
+        drmModeFreeProperty(prop);
+        if (result)
+            break;
+    }
+    drmModeFreeObjectProperties(props);
+    return result;
+}
+
 bool MinuiBackendDrm::FindAndSetMonitor(int fd, drmModeRes* resources) {
 
   /* Look for LVDS/eDP/DSI connectors. Those are the main screens. */
@@ -328,9 +395,30 @@ bool MinuiBackendDrm::FindAndSetMonitor(int fd, drmModeRes* resources) {
   if (uboot_first_mode) {
 	printf("Recovery uses uboot mode: %s\n", uboot_first_mode);
     auto envConnectors = find_used_connector_by_uboot_mode(fd, resources, uboot_first_mode);
-    for (auto connector : envConnectors) {
-      drmConnectors.push_back(connector);
-      if (drmConnectors.size() >= DRM_MAX) break;
+
+    // for multi-screen
+    if (envConnectors.size() >= 2) {
+        const char* connector0_type = get_bootloader_env("connector0_type");
+        drm_connector_type_t extend_connector_type = drmStringToConnType(connector0_type);
+        printf("find first connector %s  %d\n", connector0_type, extend_connector_type);
+        for (auto connector : envConnectors) {
+            std::optional<uint64_t> connectorType = connector->connector_type;
+            std::optional<uint64_t> mesonConnectorType = find_property_value_by_connector
+                    (fd, connector->connector_id, DRM_CONNECTOR_PROP_MESON_TYPE);
+            if (mesonConnectorType == extend_connector_type  || connectorType == extend_connector_type) {
+                drmConnectors.push_back(connector);
+                break;
+            }
+        }
+        if (drmConnectors.empty()) {
+            printf("Error, no connectors found. Using default connector\n");
+            drmConnectors.push_back(envConnectors[0]);
+        }
+    } else {
+        for (auto connector : envConnectors) {
+            drmConnectors.push_back(connector);
+            if (drmConnectors.size() >= DRM_MAX) break;
+        }
     }
   }
 

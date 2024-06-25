@@ -26,6 +26,9 @@
 #include "graphics.h"
 #include "minui/minui.h"
 
+typedef uint32_t drm_connector_type_t;
+#define DRM_MODE_CONNECTOR_INVALID_TYPE 0xffffffff
+
 class GRSurfaceDrm : public GRSurface {
  public:
   ~GRSurfaceDrm() override;
@@ -79,4 +82,30 @@ class MinuiBackendDrm : public MinuiBackend {
 
   int drm_fd{ -1 };
   DrmConnector active_display = DRM_MAIN;
+};
+
+
+enum {
+    DRM_MODE_CONNECTOR_MESON_START = 0x100,
+
+    DRM_MODE_CONNECTOR_MESON_LVDS_A = 0x100,
+    DRM_MODE_CONNECTOR_MESON_LVDS_B = 0x101,
+    DRM_MODE_CONNECTOR_MESON_LVDS_C = 0x102,
+
+    DRM_MODE_CONNECTOR_MESON_VBYONE_A = 0x110,
+    DRM_MODE_CONNECTOR_MESON_VBYONE_B = 0x111,
+
+    DRM_MODE_CONNECTOR_MESON_MIPI_A = 0x120,
+    DRM_MODE_CONNECTOR_MESON_MIPI_B = 0x121,
+
+    DRM_MODE_CONNECTOR_MESON_EDP_A = 0x130,
+    DRM_MODE_CONNECTOR_MESON_EDP_B = 0x131,
+
+    DRM_MODE_CONNECTOR_MESON_HDMIA_A = 0x300,
+    DRM_MODE_CONNECTOR_MESON_HDMIA_B = 0x301,
+    DRM_MODE_CONNECTOR_MESON_HDMIA_C = 0x302,
+
+    DRM_MODE_CONNECTOR_MESON_HDMIB_A = 0x310,
+    DRM_MODE_CONNECTOR_MESON_HDMIB_B = 0x311,
+    DRM_MODE_CONNECTOR_MESON_HDMIB_C = 0x312,
 };
