@@ -35,6 +35,8 @@ constexpr size_t WIPE_PACKAGE_OFFSET_IN_MISC = 16 * 1024;
 constexpr size_t SYSTEM_SPACE_OFFSET_IN_MISC = 32 * 1024;
 constexpr size_t SYSTEM_SPACE_SIZE_IN_MISC = 32 * 1024;
 
+extern bool rebootMosMaster;
+
 /* Bootloader Message (2-KiB)
  *
  * This structure describes the content of a block in flash

@@ -40,6 +40,12 @@ using android::fs_mgr::ReadDefaultFstab;
 
 static std::optional<std::string> g_misc_device_for_test;
 
+static bool isRockchipMosDevice() {
+    return android::base::GetBoolProperty("ro.rockchip.vehicle.mos", false);
+}
+
+bool rebootMosMaster = false;
+
 // Exposed for test purpose.
 void SetMiscBlockDeviceForTest(std::string_view misc_device) {
   g_misc_device_for_test = misc_device;
@@ -289,6 +295,11 @@ static bool WriteMiscPartitionSystemSpace(const void* data, size_t size, size_t 
   auto misc_blk_device = get_misc_blk_device(err);
   if (misc_blk_device.empty()) {
     return false;
+  }
+
+  if (isRockchipMosDevice()) {
+      rebootMosMaster = true;
+      printf("WriteMiscPartitionSystemSpace rebootMosMaster = %d\n", rebootMosMaster);
   }
   return write_misc_partition(data, size, misc_blk_device, SYSTEM_SPACE_OFFSET_IN_MISC + offset,
                               err);

@@ -78,6 +78,10 @@ static bool IsDeviceUnlocked() {
   return "orange" == android::base::GetProperty("ro.boot.verifiedbootstate", "");
 }
 
+static bool isRockchipMosDevice() {
+    return android::base::GetBoolProperty("ro.rockchip.vehicle.mos", false);
+}
+
 static void UiLogger(android::base::LogId log_buffer_id, android::base::LogSeverity severity,
                      const char* tag, const char* file, unsigned int line, const char* message) {
   android::base::KernelLogger(log_buffer_id, severity, tag, file, line, message);
@@ -614,6 +618,13 @@ int main(int argc, char** argv) {
 
       case Device::REBOOT:
         ui->Print("Rebooting...\n");
+        if (rebootMosMaster && isRockchipMosDevice()) {
+            ui->Print("rebootMosMaster is true, reboot Master!!!\n");
+            Reboot("mos");
+            break;
+        } else {
+            ui->Print("rebootMosMaster = %d\n", rebootMosMaster);
+        }
         Reboot("userrequested,recovery");
         break;
 
