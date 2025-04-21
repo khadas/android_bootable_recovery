@@ -170,12 +170,15 @@ cc_binary {
 
     srcs: [
         "recovery_main.cpp",
+        "mos/NetlinkHandler.cpp",
+        "mos/NetlinkManager.cpp",
     ],
 
     shared_libs: [
         "android.hardware.health-V2-ndk", // from librecovery_utils
         "android.hardware.boot-V1-ndk",
         "librecovery_ui",
+        "libsysutils",
     ],
 
     static_libs: [

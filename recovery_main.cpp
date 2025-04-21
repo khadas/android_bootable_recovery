@@ -50,6 +50,7 @@
 
 #include "fastboot/fastboot.h"
 #include "install/wipe_data.h"
+#include "mos/NetlinkManager.h"
 #include "otautil/boot_state.h"
 #include "otautil/paths.h"
 #include "otautil/sysutil.h"
@@ -392,6 +393,17 @@ int main(int argc, char** argv) {
   setFlashPoint();
   SDBoot rksdboot;
   std::string stage;
+
+  if (isRockchipMosDevice()) {
+    NetlinkManager* nm;
+    if (!(nm = NetlinkManager::Instance())) {
+      LOG(ERROR) << "Unable to create NetlinkManager";
+    } else {
+      if (nm->start()) {
+          PLOG(ERROR) << "Unable to start NetlinkManager";
+      }
+    }
+  }
 
   std::vector<std::string> args;
   if(rksdboot.isSDboot() || rksdboot.isUSBboot()){
